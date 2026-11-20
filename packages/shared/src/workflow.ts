@@ -55,7 +55,19 @@ export const STAGE_COLORS = [
 ] as const
 export type StageColor = (typeof STAGE_COLORS)[number]
 
-export interface DefaultStage {
+/**
+ * Where a tender in a stage may be moved, as stage keys. null means any stage.
+ *  - agentNext: the person working on the tender (an Agent)
+ *  - managerNext: extra moves for admins (users who can assign tenders), who
+ *    can also make every agent move
+ * The defaults are the rules of the original TMS; each client can change them.
+ */
+export interface StageMoveRules {
+  agentNext: string[] | null
+  managerNext: string[] | null
+}
+
+export interface DefaultStage extends StageMoveRules {
   key: string
   label: string
   type: StageType
@@ -73,15 +85,35 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     color: 'gray',
     commentMode: 'optional',
     systemRole: 'intake',
+    agentNext: [],
+    managerNext: ['watchlist', 'rejected'],
   },
-  { key: 'watchlist', label: 'Watchlist', type: 'open', color: 'indigo', commentMode: 'optional' },
-  { key: 'assigned', label: 'Assigned', type: 'preparing', color: 'blue', commentMode: 'optional' },
+  {
+    key: 'watchlist',
+    label: 'Watchlist',
+    type: 'open',
+    color: 'indigo',
+    commentMode: 'optional',
+    agentNext: [],
+    managerNext: ['new', 'rejected'],
+  },
+  {
+    key: 'assigned',
+    label: 'Assigned',
+    type: 'preparing',
+    color: 'blue',
+    commentMode: 'optional',
+    agentNext: ['in-progress'],
+    managerNext: [],
+  },
   {
     key: 'in-progress',
     label: 'In progress',
     type: 'preparing',
     color: 'blue',
     commentMode: 'optional',
+    agentNext: ['price-review', 'criteria-review'],
+    managerNext: [],
   },
   {
     key: 'price-review',
@@ -89,6 +121,8 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     type: 'review',
     color: 'amber',
     commentMode: 'optional',
+    agentNext: [],
+    managerNext: ['ready-to-bid', 'not-fit'],
   },
   {
     key: 'criteria-review',
@@ -96,6 +130,8 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     type: 'review',
     color: 'amber',
     commentMode: 'optional',
+    agentNext: [],
+    managerNext: ['ready-to-bid', 'not-fit'],
   },
   {
     key: 'ready-to-bid',
@@ -103,6 +139,8 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     type: 'preparing',
     color: 'teal',
     commentMode: 'optional',
+    agentNext: ['submitted'],
+    managerNext: [],
   },
   {
     key: 'submitted',
@@ -110,6 +148,8 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     type: 'submitted',
     color: 'purple',
     commentMode: 'optional',
+    agentNext: ['under-query', 'won', 'lost'],
+    managerNext: [],
   },
   {
     key: 'under-query',
@@ -117,18 +157,54 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     type: 'submitted',
     color: 'purple',
     commentMode: 'optional',
+    agentNext: ['won', 'lost'],
+    managerNext: [],
   },
-  { key: 'won', label: 'Won', type: 'won', color: 'green', commentMode: 'optional' },
-  { key: 'lost', label: 'Lost', type: 'lost', color: 'red', commentMode: 'required' },
+  {
+    key: 'won',
+    label: 'Won',
+    type: 'won',
+    color: 'green',
+    commentMode: 'optional',
+    agentNext: [],
+    managerNext: ['assigned-to-engineer'],
+  },
+  {
+    key: 'lost',
+    label: 'Lost',
+    type: 'lost',
+    color: 'red',
+    commentMode: 'required',
+    agentNext: [],
+    managerNext: [],
+  },
   {
     key: 'assigned-to-engineer',
     label: 'Assigned to engineer',
     type: 'execution',
     color: 'teal',
     commentMode: 'optional',
+    agentNext: [],
+    managerNext: ['completed'],
   },
-  { key: 'completed', label: 'Completed', type: 'closed', color: 'green', commentMode: 'optional' },
-  { key: 'not-fit', label: 'Not fit', type: 'dropped', color: 'gray', commentMode: 'required' },
+  {
+    key: 'completed',
+    label: 'Completed',
+    type: 'closed',
+    color: 'green',
+    commentMode: 'optional',
+    agentNext: [],
+    managerNext: [],
+  },
+  {
+    key: 'not-fit',
+    label: 'Not fit',
+    type: 'dropped',
+    color: 'gray',
+    commentMode: 'required',
+    agentNext: [],
+    managerNext: [],
+  },
   {
     key: 'not-bidded',
     label: 'Not bidded',
@@ -136,9 +212,60 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     color: 'gray',
     commentMode: 'required',
     systemRole: 'missed_deadline',
+    agentNext: [],
+    managerNext: null,
   },
-  { key: 'rejected', label: 'Rejected', type: 'dropped', color: 'red', commentMode: 'required' },
+  {
+    key: 'rejected',
+    label: 'Rejected',
+    type: 'dropped',
+    color: 'red',
+    commentMode: 'required',
+    agentNext: [],
+    managerNext: [],
+  },
 ]
 
 /** Longest stage name, so it fits in the sidebar. */
 export const STAGE_LABEL_MAX = 30
+
+/** The stage fields the move rules need (both the API and the web app have them). */
+export interface MovableStage extends StageMoveRules {
+  id: string
+  key: string
+  type: StageType
+  isVisible: boolean
+  systemRole: StageSystemRole | null
+}
+
+/**
+ * Whether the deadline rule of the original TMS applies: a tender still being
+ * prepared or reviewed after its deadline day can only go to the missed-
+ * deadline stage ("Not bidded"), unless an admin has already reopened it.
+ * Dates are YYYY-MM-DD in the client's time zone.
+ */
+export function deadlineLocked(
+  stage: Pick<MovableStage, 'type'>,
+  tender: { deadline: string; reopenedAfterDeadline: boolean },
+  today: string,
+): boolean {
+  return (
+    DEADLINE_BOUND_TYPES.includes(stage.type) &&
+    tender.deadline < today &&
+    !tender.reopenedAfterDeadline
+  )
+}
+
+/** The stages a tender in `from` may be moved to by this user, in workflow order. */
+export function allowedNextStages<S extends MovableStage>(
+  stages: S[],
+  from: S,
+  opts: { manager: boolean; locked: boolean },
+): S[] {
+  const others = stages.filter((s) => s.isVisible && s.id !== from.id)
+  if (opts.locked) return others.filter((s) => s.systemRole === 'missed_deadline')
+  const lists = opts.manager ? [from.agentNext, from.managerNext] : [from.agentNext]
+  if (lists.some((l) => l === null)) return others
+  const keys = new Set(lists.flatMap((l) => l ?? []))
+  return others.filter((s) => keys.has(s.key))
+}

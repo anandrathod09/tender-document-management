@@ -14,6 +14,8 @@ import {
 } from 'drizzle-orm'
 import { alias, type AnyMySqlColumn } from 'drizzle-orm/mysql-core'
 import {
+  allowedNextStages,
+  deadlineLocked,
   PERMISSIONS,
   STAGE_TYPES,
   type Assignee,
@@ -53,7 +55,7 @@ import { addDays, todayIn } from '../../lib/dates'
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors'
 import type { TenantAuth } from '../../types/express'
 import { notify } from '../notifications/service'
-import { firstStageOfType, getStage } from '../workflow/service'
+import { firstStageOfType, getStage, listStages } from '../workflow/service'
 
 export type ListQuery = z.output<typeof tenderListQuerySchema>
 
@@ -96,6 +98,7 @@ const summaryColumns = {
   sheetType: tenders.sheetType,
   briefUrl: tenders.briefUrl,
   excelUpdatedAt: tenders.excelUpdatedAt,
+  deadlineMissedAt: tenders.deadlineMissedAt,
   createdAt: tenders.createdAt,
   assignedAt: tenders.assignedAt,
   stageChangedAt: tenders.stageChangedAt,
@@ -131,6 +134,7 @@ function toSummary(r: SummaryRow): TenderSummary {
     assignedAt: r.assignedAt ? r.assignedAt.toISOString() : null,
     stageChangedAt: r.stageChangedAt.toISOString(),
     excelUpdatedAt: r.excelUpdatedAt ? r.excelUpdatedAt.toISOString() : null,
+    reopenedAfterDeadline: r.deadlineMissedAt !== null,
     createdAt: r.createdAt.toISOString(),
   }
 }
@@ -327,6 +331,48 @@ async function moveTarget(tx: DbOrTx, orgId: string, stageId: string): Promise<W
   return target
 }
 
+/**
+ * Checks the client's move rules (who may move a tender from its stage to
+ * which stages), and the deadline rule: after the deadline, a tender still
+ * being prepared can only go to the missed-deadline stage.
+ */
+function assertMoveAllowed(
+  auth: TenantAuth,
+  stages: WorkflowStage[],
+  tender: Tender,
+  target: WorkflowStage,
+) {
+  const from = stages.find((s) => s.id === tender.stageId)
+  if (!from) return
+  const locked = deadlineLocked(
+    from,
+    { deadline: tender.deadline, reopenedAfterDeadline: tender.deadlineMissedAt !== null },
+    todayIn(auth.org.timezone),
+  )
+  const allowed = allowedNextStages(stages.map(movable), movable(from), {
+    manager: auth.permissions.has(PERMISSIONS.TENDER_ASSIGN),
+    locked,
+  })
+  if (allowed.some((s) => s.id === target.id)) return
+  if (locked) {
+    const missed = stages.find((s) => s.systemRole === 'missed_deadline')
+    throw badRequest(
+      'DEADLINE_PASSED',
+      `The deadline of ${tender.referenceNo} has passed, so it can only be moved to "${missed?.label ?? 'Not bidded'}"`,
+    )
+  }
+  throw badRequest(
+    'MOVE_NOT_ALLOWED',
+    `${tender.referenceNo} can't be moved from "${from.label}" to "${target.label}"`,
+  )
+}
+
+const movable = (s: WorkflowStage) => ({
+  ...s,
+  agentNext: s.agentNext ?? null,
+  managerNext: s.managerNext ?? null,
+})
+
 /** The comment to store for a move, following the stage's comment setting. */
 function moveComment(target: WorkflowStage, raw: string | undefined): string | null {
   const comment = target.commentMode === 'off' ? null : raw?.trim() || null
@@ -355,6 +401,8 @@ async function applyMove(
       stageChangedAt: new Date(),
       // A manual move ends any pending "restore after missed deadline".
       previousStageId: null,
+      ...(target.systemRole === 'missed_deadline' &&
+        !tender.deadlineMissedAt && { deadlineMissedAt: new Date() }),
       ...award,
     })
     .where(orgWhere(tenders, orgId, eq(tenders.id, tender.id)))
@@ -381,6 +429,7 @@ export async function moveTender(auth: TenantAuth, id: string, input: MoveTender
     const target = await moveTarget(tx, orgId, input.stageId)
     if (target.id === tender.stageId)
       throw conflict('SAME_STAGE', 'The tender is already in this stage')
+    assertMoveAllowed(auth, await listStages(tx, orgId), tender, target)
     const comment = moveComment(target, input.comment)
     if (target.type === 'won' && input.awardAmount === undefined) {
       throw badRequest('VALIDATION_ERROR', 'Enter the award amount', [
@@ -463,8 +512,8 @@ async function applyAssign(
 ) {
   const orgId = auth.org.id
   const current = await getStage(tx, orgId, tender.stageId)
-  const next =
-    agentId && current.type === 'open' ? await firstStageOfType(tx, orgId, 'preparing') : null
+  const back = current.type === 'open' || current.key === 'rejected'
+  const next = agentId && back ? await firstStageOfType(tx, orgId, 'preparing') : null
 
   await tx
     .update(tenders)
@@ -569,6 +618,9 @@ export async function bulkTenderAction(
         )
       }
       const comment = moveComment(target, input.comment)
+      const stages = await listStages(tx, orgId)
+      // All or nothing: check every tender before moving any.
+      for (const t of rows) if (t.stageId !== target.id) assertMoveAllowed(auth, stages, t, target)
       for (const t of rows) {
         if (t.stageId === target.id) continue
         await applyMove(tx, auth, t, target, comment)

@@ -1,8 +1,14 @@
 import { eq } from 'drizzle-orm'
-import { RESERVED_SUBDOMAINS, type WorkspaceSettings } from '@tdm/shared'
+import {
+  PERMISSIONS,
+  RESERVED_SUBDOMAINS,
+  type WorkspaceSettings,
+  type WorkspaceSettingsInput,
+} from '@tdm/shared'
 import { env } from '../../config/env'
 import { db } from '../../db/client'
-import { organizations, type Organization } from '../../db/schema'
+import { orgWhere } from '../../db/scope'
+import { organizations, roles, type Organization } from '../../db/schema'
 import { writeAudit } from '../../lib/audit'
 import { conflict } from '../../lib/errors'
 import type { TenantAuth } from '../../types/express'
@@ -58,10 +64,27 @@ export function isOrganizationUsable(org: Organization): boolean {
   return org.status === 'active' || org.status === 'trial'
 }
 
+async function agentRole(orgId: string) {
+  const [role] = await db
+    .select()
+    .from(roles)
+    .where(orgWhere(roles, orgId, eq(roles.key, 'agent')))
+    .limit(1)
+  return role ?? null
+}
+
+export async function getWorkspaceSettings(org: Organization): Promise<WorkspaceSettings> {
+  const agent = await agentRole(org.id)
+  return {
+    requireTwoFactor: org.requireTwoFactor,
+    agentsSeeAssets: agent?.permissions.includes(PERMISSIONS.ASSET_VIEW) ?? false,
+  }
+}
+
 /** Saves the client's settings. Turning on "require two-step login" needs it on for yourself first. */
 export async function updateWorkspaceSettings(
   auth: TenantAuth,
-  input: WorkspaceSettings,
+  input: WorkspaceSettingsInput,
   ip: string | null,
 ): Promise<WorkspaceSettings> {
   if (input.requireTwoFactor && !auth.user.totpEnabledAt) {
@@ -71,10 +94,23 @@ export async function updateWorkspaceSettings(
     )
   }
   await db.transaction(async (tx) => {
-    await tx
-      .update(organizations)
-      .set({ requireTwoFactor: input.requireTwoFactor })
-      .where(eq(organizations.id, auth.org.id))
+    if (input.requireTwoFactor !== undefined) {
+      await tx
+        .update(organizations)
+        .set({ requireTwoFactor: input.requireTwoFactor })
+        .where(eq(organizations.id, auth.org.id))
+    }
+    // The Agent role gains or loses "see Installed assets".
+    if (input.agentsSeeAssets !== undefined) {
+      const agent = await agentRole(auth.org.id)
+      if (agent) {
+        const rest = agent.permissions.filter((p) => p !== PERMISSIONS.ASSET_VIEW)
+        await tx
+          .update(roles)
+          .set({ permissions: input.agentsSeeAssets ? [...rest, PERMISSIONS.ASSET_VIEW] : rest })
+          .where(orgWhere(roles, auth.org.id, eq(roles.id, agent.id)))
+      }
+    }
     await writeAudit(tx, {
       organizationId: auth.org.id,
       actorType: 'user',
@@ -87,5 +123,6 @@ export async function updateWorkspaceSettings(
     })
   })
   invalidateOrganization(auth.org.slug)
-  return { requireTwoFactor: input.requireTwoFactor }
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, auth.org.id))
+  return getWorkspaceSettings(org!)
 }

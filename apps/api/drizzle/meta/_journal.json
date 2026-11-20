@@ -85,6 +85,13 @@
       "when": 1795155582594,
       "tag": "0011_letter_templates",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1795214366454,
+      "tag": "0012_stage_move_rules",
+      "breakpoints": true
     }
   ]
 }

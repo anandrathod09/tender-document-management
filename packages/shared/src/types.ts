@@ -76,6 +76,8 @@ export interface TwoFactorSetup {
 
 export interface WorkspaceSettings {
   requireTwoFactor: boolean
+  /** Agents see the Installed assets page (off by default). */
+  agentsSeeAssets: boolean
 }
 
 export interface PlanSummary {

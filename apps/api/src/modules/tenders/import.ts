@@ -241,7 +241,12 @@ export async function importTenders(
               ...(restoreTo && { restoredTo: restoreTo.label }),
             },
             excelUpdatedAt: now,
-            ...(restoreTo && { stageId: restoreTo.id, previousStageId: null, stageChangedAt: now }),
+            ...(restoreTo && {
+              stageId: restoreTo.id,
+              previousStageId: null,
+              stageChangedAt: now,
+              deadlineMissedAt: null,
+            }),
           })
           .where(orgWhere(tenders, orgId, eq(tenders.id, current.id)))
 

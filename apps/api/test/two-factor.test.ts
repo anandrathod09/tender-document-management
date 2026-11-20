@@ -160,6 +160,7 @@ describe('two-step login', () => {
     await turnOn(ACME, adminToken)
     expect((await admin.patch('/workspace/settings', { requireTwoFactor: true })).body).toEqual({
       requireTwoFactor: true,
+      agentsSeeAssets: false,
     })
 
     // Someone without it can sign in, but only reach the setup.

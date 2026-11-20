@@ -3,6 +3,7 @@ import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type { CompanySummary, CompliancePackSummary, FileSummary } from '@tdm/shared'
 import {
+  allowAnyMove,
   app,
   bearer,
   createOwner,
@@ -73,6 +74,7 @@ describe('companies, documents and compliance PDFs', () => {
     await resetDb()
     await createOwner()
     adminToken = (await setupClient(await loginOwner(), await createPlan(), 'acme')).adminToken
+    await allowAnyMove('acme')
     await importFile(ACME, adminToken, await workbook({ S: [t247Row('PWD/7')] }))
     tenderId = (await listAll(ACME, adminToken)).items[0]!.id
   })

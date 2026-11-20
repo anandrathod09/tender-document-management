@@ -11,6 +11,7 @@ import type {
 } from '@tdm/shared'
 import { addDays } from '../src/lib/dates'
 import {
+  allowAnyMove,
   app,
   bearer,
   createOwner,
@@ -57,6 +58,7 @@ describe('installation reports, assets, tickets and reports', () => {
     await resetDb()
     await createOwner()
     adminToken = (await setupClient(await loginOwner(), await createPlan(), 'acme')).adminToken
+    await allowAnyMove('acme')
     await importFile(ACME, adminToken, await workbook({ S: [t247Row('PWD/1'), t247Row('PWD/2')] }))
     tenderId = (await listAll(ACME, adminToken)).items.find((t) => t.referenceNo === 'PWD/1')!.id
     stages = await stagesOf(ACME, adminToken)

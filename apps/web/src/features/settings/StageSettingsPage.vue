@@ -16,6 +16,7 @@ import { api, errorMessage } from '@/services/api'
 import { useWorkflowStore } from '@/stores/workflow'
 import { stageDotClasses } from '@/utils/tenders'
 import AddStageDialog from './AddStageDialog.vue'
+import MoveRulesDialog from './MoveRulesDialog.vue'
 import { COLOR_LABELS } from './stage-ui'
 
 /**
@@ -34,6 +35,22 @@ const adding = ref(false)
 const deleting = ref<StageSummary | null>(null)
 const deletingBusy = ref(false)
 const moving = ref(false)
+const editingMoves = ref<StageSummary | null>(null)
+
+function onMovesSaved(stage: StageSummary) {
+  workflow.replaceStage(stage)
+  editingMoves.value = null
+  notice.value = `Saved the moves from “${stage.label}”.`
+}
+
+/** "In progress, Price review" for a list of stage keys; null = any stage. */
+function namesOf(keys: string[] | null): string {
+  if (keys === null) return 'Any stage'
+  const names = keys
+    .map((k) => workflow.stages.find((s) => s.key === k)?.label)
+    .filter((n): n is string => !!n)
+  return names.join(', ')
+}
 
 onMounted(async () => {
   try {
@@ -134,6 +151,7 @@ const columns: TableColumn[] = [
   { key: 'label', label: 'Stage Name', sticky: true, class: 'min-w-64' },
   { key: 'type', label: 'Kind' },
   { key: 'color', label: 'Colour' },
+  { key: 'moves', label: 'Can Move To' },
   { key: 'commentMode', label: 'Comment When Moving Here' },
   { key: 'count', label: 'Tenders', align: 'right' },
   { key: 'isVisible', label: 'Shown' },
@@ -219,6 +237,26 @@ const indexOf = (s: StageSummary) => workflow.stages.findIndex((x) => x.id === s
             <option v-for="c in STAGE_COLORS" :key="c" :value="c">{{ COLOR_LABELS[c] }}</option>
           </select>
         </template>
+        <template #cell-moves="{ row }">
+          <button
+            type="button"
+            class="block max-w-72 text-left text-xs leading-5 hover:text-blue-600 dark:hover:text-blue-400"
+            :aria-label="`Edit moves from ${row.label}`"
+            @click="editingMoves = row"
+          >
+            <span v-if="namesOf(row.agentNext)" class="block">
+              <span class="font-medium text-gray-700 dark:text-gray-300">Agent:</span>
+              {{ namesOf(row.agentNext) }}
+            </span>
+            <span v-if="namesOf(row.managerNext)" class="block">
+              <span class="font-medium text-gray-700 dark:text-gray-300">Admin:</span>
+              {{ namesOf(row.managerNext) }}
+            </span>
+            <span v-if="!namesOf(row.agentNext) && !namesOf(row.managerNext)" class="text-gray-400">
+              Nowhere (final stage)
+            </span>
+          </button>
+        </template>
         <template #cell-commentMode="{ row }">
           <select
             :value="row.commentMode"
@@ -262,6 +300,11 @@ const indexOf = (s: StageSummary) => workflow.stages.findIndex((x) => x.id === s
         </template>
         <template #actions="{ row }">
           <IconButton
+            :icon="ACTION_ICONS.edit"
+            :label="`Edit moves from ${row.label}`"
+            @click="editingMoves = row"
+          />
+          <IconButton
             :icon="ArrowUp"
             :label="`Move ${row.label} up`"
             :disabled="moving || indexOf(row) === 0"
@@ -287,8 +330,18 @@ const indexOf = (s: StageSummary) => workflow.stages.findIndex((x) => x.id === s
     <p class="mt-4 text-xs text-gray-500 dark:text-gray-400">
       A stage can be hidden only when no tenders are in it. Default stages can be hidden but not
       deleted; your own stages can be deleted until a tender has used them. Reports and deadline
-      rules use each stage's kind, so renaming or reordering never breaks them.
+      rules use each stage's kind, so renaming or reordering never breaks them. “Can move to” lists
+      the next steps the Agent working on a tender may choose, and the extra ones only admins may
+      choose; click it to change them.
     </p>
+
+    <MoveRulesDialog
+      :open="!!editingMoves"
+      :stage="editingMoves"
+      :stages="workflow.stages"
+      @close="editingMoves = null"
+      @saved="onMovesSaved"
+    />
 
     <AddStageDialog
       :open="adding"

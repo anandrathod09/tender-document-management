@@ -36,6 +36,7 @@ import { daysUntil, formatINR, formatINRShort } from '@/utils/tenders'
 import AssignTendersDialog from './AssignTendersDialog.vue'
 import type { MoveMode } from './move-mode'
 import MoveTendersDialog from './MoveTendersDialog.vue'
+import { useMoveRules } from './move-rules'
 
 /** Rows per page, as offered by the original TMS. */
 const PAGE_SIZES = [5, 10, 20, 50]
@@ -210,15 +211,18 @@ const watchStage = computed(() => visible((s) => s.key === 'watchlist'))
 const rejectStage = computed(() => visible((s) => s.key === 'rejected'))
 const intakeStage = computed(() => visible((s) => s.systemRole === 'intake'))
 const keyOf = (t: TenderSummary) => workflow.byId.get(t.stage.id)?.key
+const rules = useMoveRules()
+const canGo = (t: TenderSummary, stage: StageSummary | undefined) =>
+  !!stage && rules.nextFor(t).some((s) => s.id === stage.id)
 
 type QuickMove = 'watch' | 'unwatch' | 'reject'
 function quickMoves(t: TenderSummary): QuickMove[] {
   if (!canMove || t.stage.type !== 'open') return []
   const key = keyOf(t)
   const out: QuickMove[] = []
-  if (key !== 'watchlist' && watchStage.value) out.push('watch')
-  if (key === 'watchlist' && intakeStage.value) out.push('unwatch')
-  if (key !== 'rejected' && rejectStage.value) out.push('reject')
+  if (key !== 'watchlist' && canGo(t, watchStage.value)) out.push('watch')
+  if (key === 'watchlist' && canGo(t, intakeStage.value)) out.push('unwatch')
+  if (key !== 'rejected' && canGo(t, rejectStage.value)) out.push('reject')
   return out
 }
 
@@ -340,7 +344,7 @@ onBeforeUnmount(() => {
             @click="openAssign(selectedTenders)"
           />
           <IconButton
-            v-if="canMove"
+            v-if="canMove && rules.commonNext(selectedTenders).length"
             :icon="ACTION_ICONS.move"
             label="Move selected to another stage"
             variant="primary"
@@ -519,7 +523,7 @@ onBeforeUnmount(() => {
             />
           </template>
           <IconButton
-            v-else-if="canMove"
+            v-else-if="canMove && rules.nextFor(row).length"
             :icon="ACTION_ICONS.move"
             label="Move to another stage"
             :disabled="selected.length > 0"

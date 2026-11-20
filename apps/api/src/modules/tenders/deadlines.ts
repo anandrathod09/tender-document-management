@@ -43,13 +43,20 @@ export async function sweepOrganization(
           orgId,
           inArray(workflowStages.type, [...DEADLINE_BOUND_TYPES]),
           lt(tenders.deadline, today),
+          // Reopened by an admin after missing the deadline: leave it be.
+          isNull(tenders.deadlineMissedAt),
         ),
       )
 
     for (const t of overdue) {
       await tx
         .update(tenders)
-        .set({ stageId: missed.id, previousStageId: t.stageId, stageChangedAt: now })
+        .set({
+          stageId: missed.id,
+          previousStageId: t.stageId,
+          stageChangedAt: now,
+          deadlineMissedAt: now,
+        })
         .where(orgWhere(tenders, orgId, eq(tenders.id, t.id)))
     }
     if (overdue.length) {

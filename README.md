@@ -68,7 +68,7 @@ What the command does:
 - Creates the Agent login and, if the agent has no tenders yet, assigns the two oldest unassigned tenders to them.
 - Running it again resets these logins, for example after trying two-step login.
 
-**Seeing the app as an agent.** There is no separate agent app. An Agent signs in at the same address and sees the same screens, limited by their role: only the tenders assigned to them (in the list, the stage pages and the dashboard counts), and no Users, Settings, Upload or Billing pages. To try it, sign in as `agent@demo.test` in a private window, or assign a tender to "Demo Agent" as the admin and watch it appear on the agent's side.
+**Seeing the app as an agent.** There is no separate agent app. An Agent signs in at the same address and sees the same screens, limited by their role (see [Roles](#roles-and-what-each-person-sees)). To try it, sign in as `agent@demo.test` in a private window, or assign a tender to "Demo Agent" as the admin and watch it appear on the agent's side.
 
 These passwords are public, so the command **refuses to run** when `NODE_ENV=production` or `BASE_DOMAIN` is not `localhost`. Real owner accounts come from `npm run db:seed`, which prints a random password once.
 
@@ -145,6 +145,27 @@ On the tender list, the quick actions follow the client's own stages: Add to wat
   - A sheet that lacks the brief or deadline column is skipped and listed in the report. It is not counted as bad rows.
 - **Choosing a layout:** the import page reads the chosen file's headings and picks the matching layout itself. The user can still change it.
 
+## Roles and what each person sees
+
+Every client starts with four roles. An Agent, Engineer or Viewer signs in at the same address as the admin and sees the same screens, with the menu and the data limited by their role.
+
+|                                                                      | Admin                                              | Agent                                            | Engineer                                         | Viewer          |
+| -------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------ | --------------- |
+| Tenders they see                                                     | all                                                | only those assigned to them                      | those where they are the engineer on a consignee | all (read only) |
+| Dashboard and stage counts                                           | all tenders                                        | their own tenders                                | their own tenders                                | all tenders     |
+| Move a tender to another stage                                       | yes, following the [move rules](#stage-move-rules) | yes, their own tenders, following the move rules | no                                               | no              |
+| Assign tenders, watchlist, reject                                    | yes                                                | no                                               | no                                               | no              |
+| Upload Excel, export to Excel                                        | yes                                                | no                                               | no                                               | no              |
+| Add documents and make compliance letters on a tender                | yes                                                | yes, on their tenders                            | yes, on their tenders                            | yes             |
+| Installation reports, service tickets                                | yes                                                | no                                               | yes                                              | no              |
+| Installed assets page                                                | yes                                                | **hidden by default** (see below)                | yes                                              | yes             |
+| Reports                                                              | yes                                                | yes                                              | no                                               | yes             |
+| Users, Workflow stages, Bidding companies, Letter templates, Billing | yes                                                | no                                               | no                                               | no              |
+
+**Installed assets for agents.** The page is hidden from agents unless the admin turns on **Agents see Installed assets** on the Users page. The switch adds or removes the `asset.view` permission on the Agent role, and agents see the change the next time they load the app.
+
+**Notifications.** An agent gets a bell notification when a tender is assigned to them, and when someone else moves one of their tenders.
+
 ## Workflow stages
 
 Client admins manage stages under Manage → Workflow stages. They can:
@@ -158,6 +179,37 @@ A stage's **kind** decides how reports, the dashboard and the deadline rules tre
 
 - **Default stages** keep their key (so `watchlist`, `rejected` and so on still work after renaming) and can only be hidden.
 - **Custom stages** can be deleted until a tender has used them.
+
+### Stage move rules
+
+As in the original TMS, the "Update Workflow Status" list only offers the next steps of the tender's current stage, not every stage. Each stage has two lists, shown in the **Can Move To** column of Workflow stages. Click it to change them:
+
+- **Agent:** where the agent working on the tender may move it.
+- **Admin:** extra moves only admins make (approvals, handing over, closing). Admins can always make the agent's moves too.
+
+The defaults copy the original TMS:
+
+| From                               | Agent can move to             | Admin can also move to |
+| ---------------------------------- | ----------------------------- | ---------------------- |
+| New                                | —                             | Watchlist, Rejected    |
+| Watchlist                          | —                             | New, Rejected          |
+| Assigned                           | In progress                   | —                      |
+| In progress                        | Price review, Criteria review | —                      |
+| Price review / Criteria review     | — (waits for the admin)       | Ready to bid, Not fit  |
+| Ready to bid                       | Submitted                     | —                      |
+| Submitted                          | Under query, Won, Lost        | —                      |
+| Under query                        | Won, Lost                     | —                      |
+| Won                                | —                             | Assigned to engineer   |
+| Assigned to engineer               | —                             | Completed              |
+| Not bidded                         | —                             | any stage (reopen)     |
+| Lost, Completed, Not fit, Rejected | —                             | —                      |
+
+Other rules:
+
+- **Assigning** a tender in New, Watchlist or Rejected moves it to Assigned. It is not limited by the lists above.
+- **Deadline:** once a tender still being prepared or reviewed is past its deadline day, the only move left is "Not bidded". The daily job also moves such tenders there. If an admin then reopens it (moves it out of Not bidded), the deadline rule no longer applies to it.
+- **Your own stages** start with no agent moves and "any stage" for admins. Add them to the lists of the stages around them.
+- Bulk moves only offer stages allowed for every selected tender. The API checks the same rules, so they can't be skipped.
 
 API: `GET/POST /api/workflow/stages`, `PATCH/DELETE /api/workflow/stages/:id`, `PUT /api/workflow/stages/order`.
 

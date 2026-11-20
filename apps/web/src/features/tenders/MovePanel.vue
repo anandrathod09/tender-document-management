@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import type { TenderDetail } from '@tdm/shared'
 import StageBadge from '@/components/StageBadge.vue'
+import ModalCallout from '@/components/ui/ModalCallout.vue'
 import UiAlert from '@/components/ui/UiAlert.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
@@ -10,10 +11,12 @@ import UiSelect from '@/components/ui/UiSelect.vue'
 import UiTextarea from '@/components/ui/UiTextarea.vue'
 import { api, errorMessage, fieldErrors } from '@/services/api'
 import { useWorkflowStore } from '@/stores/workflow'
+import { useMoveRules } from './move-rules'
 
 const props = defineProps<{ tender: TenderDetail }>()
 const emit = defineEmits<{ moved: [tender: TenderDetail] }>()
 const workflow = useWorkflowStore()
+const rules = useMoveRules()
 
 const stageId = ref('')
 const comment = ref('')
@@ -23,17 +26,17 @@ const errors = ref<Record<string, string>>({})
 const error = ref('')
 const saving = ref(false)
 
+// Only the next steps the client's rules allow this user, as in the original TMS.
 const options = computed(() =>
-  workflow.visibleStages
-    .filter((s) => s.id !== props.tender.stage.id)
-    .map((s) => ({ value: s.id, label: s.label })),
+  rules.nextFor(props.tender).map((s) => ({ value: s.id, label: s.label })),
 )
+const locked = computed(() => rules.locked(props.tender))
 const target = computed(() => (stageId.value ? workflow.byId.get(stageId.value) : undefined))
 
 watch(
   () => props.tender.stage.id,
   () => {
-    stageId.value = ''
+    stageId.value = locked.value && options.value.length === 1 ? options.value[0]!.value : ''
     comment.value = ''
     awardAmount.value = ''
     awardNumber.value = ''
@@ -82,12 +85,25 @@ async function submit() {
         <StageBadge :label="tender.stage.label" :color="tender.stage.color" />
       </div>
 
+      <ModalCallout v-if="locked" tone="danger" lead="Deadline passed: ">
+        This tender was not submitted in time, so it can only be marked
+        {{ options[0]?.label ?? 'Not bidded' }}.
+      </ModalCallout>
+
       <UiSelect
+        v-if="options.length"
         v-model="stageId"
         label="Update Workflow Status"
         :options="options"
         placeholder="Select Workflow Status"
       />
+      <p v-else class="text-sm text-gray-500 dark:text-gray-400">
+        {{
+          rules.manager.value
+            ? 'There is no next stage for this tender.'
+            : 'The next step is with an admin. You will be told when it moves.'
+        }}
+      </p>
 
       <template v-if="target?.type === 'won'">
         <UiInput
@@ -120,7 +136,7 @@ async function submit() {
         />
       </div>
 
-      <UiButton type="submit" :disabled="!stageId" :loading="saving" block>
+      <UiButton v-if="options.length" type="submit" :disabled="!stageId" :loading="saving" block>
         {{ target ? `Update to ${target.label}` : 'Update Status' }}
       </UiButton>
     </form>

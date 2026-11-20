@@ -76,7 +76,7 @@ installationRouter.get('/pdf', async (req, res) => {
 export const assetsRouter = Router()
 assetsRouter.use(authenticateTenant)
 
-assetsRouter.get('/', async (req, res) => {
+assetsRouter.get('/', requirePermission(PERMISSIONS.ASSET_VIEW), async (req, res) => {
   res.json(await listAssets(tenantAuth(req), parse(assetListQuerySchema, req.query)))
 })
 

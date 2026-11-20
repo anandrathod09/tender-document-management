@@ -69,6 +69,23 @@ async function setRequireTwoFactor(on: boolean) {
     savingSettings.value = false
   }
 }
+async function setAgentsSeeAssets(on: boolean) {
+  actionError.value = ''
+  notice.value = ''
+  savingSettings.value = true
+  try {
+    settings.value = (
+      await api.patch<WorkspaceSettings>('/workspace/settings', { agentsSeeAssets: on })
+    ).data
+    notice.value = on
+      ? 'Agents can now see Installed assets (after they reload the page).'
+      : 'Installed assets is now hidden from agents.'
+  } catch (err) {
+    actionError.value = errorMessage(err)
+  } finally {
+    savingSettings.value = false
+  }
+}
 const twoFactorCount = computed(() => users.value.filter((u) => u.twoFactorEnabled).length)
 
 async function confirmReset() {
@@ -301,6 +318,33 @@ async function confirmToggle() {
             />
           </button>
           Require 2-step login
+        </label>
+        <label
+          v-if="settings"
+          class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
+          v-tooltip.wide="
+            'Show the Installed assets page to users with the Agent role. Off by default.'
+          "
+        >
+          <button
+            type="button"
+            role="switch"
+            :aria-checked="settings.agentsSeeAssets"
+            :disabled="savingSettings"
+            :class="[
+              'relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50',
+              settings.agentsSeeAssets ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-700',
+            ]"
+            @click="setAgentsSeeAssets(!settings.agentsSeeAssets)"
+          >
+            <span
+              :class="[
+                'absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow-theme-sm transition-transform',
+                settings.agentsSeeAssets && 'translate-x-5',
+              ]"
+            />
+          </button>
+          Agents see Installed assets
         </label>
         <UiButton size="xs" :disabled="!roles.length" @click="inviteOpen = true">
           <UserPlus class="size-4" aria-hidden="true" /> Add User

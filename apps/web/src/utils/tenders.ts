@@ -26,7 +26,8 @@ const deadlineFmt = new Intl.DateTimeFormat('en-IN', {
 })
 export const formatDeadline = (date: string) => deadlineFmt.format(new Date(`${date}T00:00:00Z`))
 
-function localToday(): string {
+/** Today as YYYY-MM-DD on this computer. */
+export function localToday(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }

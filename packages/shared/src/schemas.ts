@@ -31,7 +31,11 @@ export const twoFactorLoginSchema = z.object({
 })
 export const twoFactorCodeSchema = z.object({ code: twoFactorCode })
 export const disableTwoFactorSchema = z.object({ password: z.string().min(1).max(200) })
-export const workspaceSettingsSchema = z.object({ requireTwoFactor: z.boolean() })
+export const workspaceSettingsSchema = z
+  .object({ requireTwoFactor: z.boolean(), agentsSeeAssets: z.boolean() })
+  .partial()
+  .refine((v) => Object.keys(v).length > 0, 'Nothing to update')
+export type WorkspaceSettingsInput = z.infer<typeof workspaceSettingsSchema>
 
 export const acceptInviteSchema = z.object({
   token: z.string().min(20).max(200),
@@ -111,6 +115,9 @@ export const updateStageSchema = z
     commentMode: z.enum(COMMENT_MODES),
     isVisible: z.boolean(),
     color: z.enum(STAGE_COLORS),
+    /** Stage keys; null = any stage. */
+    agentNext: z.array(z.string().max(50)).max(60).nullable(),
+    managerNext: z.array(z.string().max(50)).max(60).nullable(),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update')

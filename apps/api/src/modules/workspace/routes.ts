@@ -8,7 +8,7 @@ import {
 import { notFound } from '../../lib/errors'
 import { parse } from '../../lib/validate'
 import { authenticateTenant, requirePermission, tenantAuth } from '../../middleware/auth'
-import { updateWorkspaceSettings } from './service'
+import { getWorkspaceSettings, updateWorkspaceSettings } from './service'
 
 export const workspaceRouter = Router()
 
@@ -30,9 +30,9 @@ workspaceRouter.get('/', (req, res) => {
   res.json(info)
 })
 
-/** The client's own settings (currently: whether two-step login is required). */
-workspaceRouter.get('/settings', authenticateTenant, (req, res) => {
-  const settings: WorkspaceSettings = { requireTwoFactor: tenantAuth(req).org.requireTwoFactor }
+/** The client's own settings: two-step login required, agents see Installed assets. */
+workspaceRouter.get('/settings', authenticateTenant, async (req, res) => {
+  const settings: WorkspaceSettings = await getWorkspaceSettings(tenantAuth(req).org)
   res.json(settings)
 })
 

@@ -2,7 +2,8 @@ import request from 'supertest'
 import type { LoginResponse, OrganizationDetail } from '@tdm/shared'
 import { createApp } from '../src/app'
 import { db, pool } from '../src/db/client'
-import { plans, platformUsers } from '../src/db/schema'
+import { eq } from 'drizzle-orm'
+import { organizations, plans, platformUsers, workflowStages } from '../src/db/schema'
 import { testOutbox } from '../src/lib/mailer'
 import { hashPassword } from '../src/lib/password'
 import { clearOrganizationCache } from '../src/modules/workspace/service'
@@ -112,6 +113,19 @@ export async function setupClient(ownerToken: string, planId: string, slug: stri
     adminId: body.session.user.id,
     refreshCookie: refreshCookieFrom(accepted.headers['set-cookie']),
   }
+}
+
+/**
+ * Lifts the stage move rules for a client (any user may move to any stage),
+ * for tests about other things that need tenders in a given stage quickly.
+ * The rules themselves are tested in move-rules.test.ts.
+ */
+export async function allowAnyMove(slug: string) {
+  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug))
+  await db
+    .update(workflowStages)
+    .set({ agentNext: null, managerNext: null })
+    .where(eq(workflowStages.organizationId, org!.id))
 }
 
 /** Returns "tdm_rt=<value>" from a response's Set-Cookie header. */

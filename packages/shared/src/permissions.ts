@@ -18,6 +18,8 @@ export const PERMISSIONS = {
   INSTALLATION_MANAGE: 'installation.manage',
   /** Handle client feedback and service tickets. */
   TICKET_MANAGE: 'ticket.manage',
+  /** See the Installed assets page. Agents don't have it unless the admin turns it on. */
+  ASSET_VIEW: 'asset.view',
 } as const
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -45,11 +47,12 @@ export const DEFAULT_ROLES: { key: DefaultRoleKey; name: string; permissions: Pe
       PERMISSIONS.TENDER_VIEW_ASSIGNED,
       PERMISSIONS.INSTALLATION_MANAGE,
       PERMISSIONS.TICKET_MANAGE,
+      PERMISSIONS.ASSET_VIEW,
     ],
   },
   {
     key: 'viewer',
     name: 'Viewer',
-    permissions: [PERMISSIONS.TENDER_VIEW_ALL, PERMISSIONS.REPORT_VIEW],
+    permissions: [PERMISSIONS.TENDER_VIEW_ALL, PERMISSIONS.REPORT_VIEW, PERMISSIONS.ASSET_VIEW],
   },
 ]

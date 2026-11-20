@@ -63,7 +63,12 @@ export function tenantMenu(
     {
       title: 'After the win',
       items: [
-        { label: 'Installed assets', to: '/assets', icon: HardDrive },
+        {
+          label: 'Installed assets',
+          to: '/assets',
+          icon: HardDrive,
+          permission: PERMISSIONS.ASSET_VIEW,
+        },
         {
           label: 'Service tickets',
           to: '/tickets',

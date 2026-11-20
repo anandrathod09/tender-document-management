@@ -34,6 +34,8 @@ export async function createDefaultStages(conn: DbOrTx, organizationId: string) 
       color: s.color,
       commentMode: s.commentMode,
       systemRole: s.systemRole ?? null,
+      agentNext: s.agentNext,
+      managerNext: s.managerNext,
       sortOrder: (i + 1) * 10,
     })),
   )
@@ -52,6 +54,8 @@ export function toStageSummary(s: WorkflowStage): StageSummary {
     systemRole: s.systemRole,
     sortOrder: s.sortOrder,
     isCustom: s.key.startsWith(CUSTOM_PREFIX),
+    agentNext: s.agentNext ?? null,
+    managerNext: s.managerNext ?? null,
   }
 }
 
@@ -177,10 +181,26 @@ export async function updateStage(
       }
     }
 
+    // Move rules may only name other stages of this workspace.
+    if (input.agentNext || input.managerNext) {
+      const keys = new Set((await listStages(tx, org.id)).map((s) => s.key))
+      keys.delete(stage.key)
+      for (const k of [...(input.agentNext ?? []), ...(input.managerNext ?? [])]) {
+        if (!keys.has(k))
+          throw badRequest('STAGE_NOT_FOUND', 'One of the chosen stages does not exist')
+      }
+    }
+
     await tx
       .update(workflowStages)
       .set({
         ...(label !== undefined && { label }),
+        ...(input.agentNext !== undefined && {
+          agentNext: input.agentNext ? [...new Set(input.agentNext)] : null,
+        }),
+        ...(input.managerNext !== undefined && {
+          managerNext: input.managerNext ? [...new Set(input.managerNext)] : null,
+        }),
         ...(input.commentMode !== undefined && { commentMode: input.commentMode }),
         ...(input.isVisible !== undefined && { isVisible: input.isVisible }),
         ...(input.color !== undefined && { color: input.color }),
@@ -248,6 +268,9 @@ export async function createStage(
       type: input.type,
       color: input.color,
       commentMode: input.commentMode,
+      // A new stage: admins can move tenders on from it to any stage until they set its rules.
+      agentNext: [],
+      managerNext: null,
       sortOrder: 0,
     })
     const order = all.map((s) => s.id)

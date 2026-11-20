@@ -319,6 +319,10 @@ export const workflowStages = mysqlTable(
     commentMode: mysqlEnum('comment_mode', COMMENT_MODES).notNull().default('optional'),
     isVisible: boolean('is_visible').notNull().default(true),
     systemRole: mysqlEnum('system_role', STAGE_SYSTEM_ROLES),
+    /** Stage keys an Agent may move a tender to from here; null = any stage. */
+    agentNext: json('agent_next').$type<string[] | null>(),
+    /** Extra stage keys an admin may move to; null = any stage. */
+    managerNext: json('manager_next').$type<string[] | null>(),
     sortOrder: int('sort_order').notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
@@ -380,6 +384,11 @@ export const tenders = mysqlTable(
 
     excelUpdate: json('excel_update').$type<ExcelUpdateInfo>(),
     excelUpdatedAt: datetime('excel_updated_at', { mode: 'date', fsp: 3 }),
+    /**
+     * When the tender went to the missed-deadline stage. Kept after an admin
+     * reopens it, so the deadline rule doesn't send it back again.
+     */
+    deadlineMissedAt: datetime('deadline_missed_at', { mode: 'date', fsp: 3 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },

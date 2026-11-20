@@ -12,6 +12,7 @@ import UiSelect from '@/components/ui/UiSelect.vue'
 import UiTextarea from '@/components/ui/UiTextarea.vue'
 import { api, errorMessage, fieldErrors } from '@/services/api'
 import { useWorkflowStore } from '@/stores/workflow'
+import { useMoveRules } from './move-rules'
 import TenderBatchList from './TenderBatchList.vue'
 import TenderFacts from './TenderFacts.vue'
 
@@ -35,6 +36,7 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{ close: []; done: [message: string] }>()
 const workflow = useWorkflowStore()
+const rules = useMoveRules()
 
 const REASON_MIN = 10
 
@@ -62,12 +64,12 @@ watch(
 const many = computed(() => props.tenders.length > 1)
 const one = computed(() => props.tenders[0])
 const count = computed(() => props.tenders.length)
-const currentIds = computed(() => new Set(props.tenders.map((t) => t.stage.id)))
+// Only stages the client's rules allow for every selected tender.
 const options = computed(() =>
-  workflow.visibleStages
+  rules
+    .commonNext(props.tenders)
     // Won needs an award amount per tender, so it is one at a time.
     .filter((s) => !(many.value && s.type === 'won'))
-    .filter((s) => !(currentIds.value.size === 1 && currentIds.value.has(s.id)))
     .map((s) => ({ value: s.id, label: s.label })),
 )
 const target = computed(() => (chosen.value ? workflow.byId.get(chosen.value) : undefined))

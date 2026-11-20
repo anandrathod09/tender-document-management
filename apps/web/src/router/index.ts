@@ -98,7 +98,7 @@ function tenantRoutes(): RouteRecordRaw[] {
         {
           path: 'assets',
           component: () => import('@/features/assets/AssetsPage.vue'),
-          meta: { title: 'Installed assets' },
+          meta: { title: 'Installed assets', permission: PERMISSIONS.ASSET_VIEW },
         },
         {
           path: 'tickets',

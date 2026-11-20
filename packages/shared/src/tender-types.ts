@@ -15,6 +15,10 @@ export interface StageSummary {
   sortOrder: number
   /** Added by the client (can be deleted while unused); default stages can only be hidden. */
   isCustom: boolean
+  /** Stage keys an Agent may move a tender to from here; null = any stage. */
+  agentNext: string[] | null
+  /** Extra stage keys an admin may move to; null = any stage. */
+  managerNext: string[] | null
 }
 
 export interface StageRef {
@@ -52,6 +56,8 @@ export interface TenderSummary {
   stageChangedAt: string
   /** When the last Excel upload changed this tender, if it did. */
   excelUpdatedAt: string | null
+  /** It missed its deadline once and an admin brought it back, so the deadline rule no longer applies. */
+  reopenedAfterDeadline: boolean
   createdAt: string
 }
 
