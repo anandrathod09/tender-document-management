@@ -240,9 +240,15 @@ The app sends these emails, each as a designed HTML email in the old TMS style p
 | Password reset                     | someone uses "Forgot password?" on the sign-in page                                     | red         |
 | Renewal reminder                   | a client's trial or paid plan is about to end, or has ended                             | amber / red |
 
+| Invitation                                                  | Password reset                                                      | Invitation on a phone                                                        |
+| ----------------------------------------------------------- | ------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| ![Invitation email](docs/screenshots/emails/invitation.png) | ![Password reset email](docs/screenshots/emails/password-reset.png) | ![Invitation email on a phone](docs/screenshots/emails/invitation-phone.png) |
+
 The layout and its pieces (header band, button, details box, note) are in `apps/api/src/lib/email-templates.ts`. Every value put into an email is escaped.
 
 **Seeing them locally.** With `SMTP_HOST` empty, nothing is sent: each email is saved to `apps/api/storage/mail-outbox/` and printed in the API console. Open http://owner.localhost:5173/api/dev/mail to see the list and each email exactly as it would arrive. This page exists only when `NODE_ENV=development`.
+
+![The local mail outbox](docs/screenshots/emails/mail-outbox.png)
 
 **Sending real emails.** Fill in `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM_ADDRESS` in `apps/api/.env` (Brevo, Amazon SES, Postmark, Zoho or Gmail all give SMTP details), then restart the API. For a live server, set up SPF and DKIM for the sending domain so emails don't land in spam.
 
