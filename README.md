@@ -48,6 +48,25 @@ This starts the API on port 4000 and the web app on port 5173. Browsers send any
 | http://owner.localhost:5173 | Owner panel: create and manage clients |
 | http://acme.localhost:5173 | Client "acme" (after you create it in the owner panel) |
 
+### Demo logins (local only)
+
+To try the app straight away, create the demo data:
+
+```bash
+npm run db:demo
+```
+
+| Open | Email | Password |
+| --- | --- | --- |
+| http://demo.localhost:5173 (demo client "Demo Infra Pvt Ltd") | `admin@demo.test` | `demo-password-1` |
+| http://owner.localhost:5173 (owner panel) | `owner@demo.test` | `demo-owner-password` |
+
+What the command does:
+- Adds a bidding company and 3 sample tenders, but only if the demo client has no tenders yet, so your work is never overwritten.
+- Running it again resets these two logins, for example after trying two-step login.
+
+These passwords are public, so the command **refuses to run** when `NODE_ENV=production` or `BASE_DOMAIN` is not `localhost`. Real owner accounts come from `npm run db:seed`, which prints a random password once.
+
 Without SMTP settings, emails (such as invitations) are printed in the API console instead of being sent. The owner panel and the Users page also show each invitation link so you can copy it.
 
 ## Everyday commands
@@ -60,6 +79,7 @@ Without SMTP settings, emails (such as invitations) are printed in the API conso
 | `npm run build` | Production builds of the API and web app |
 | `npm run db:generate -- --name <change>` | Creates a migration after editing `apps/api/src/db/schema.ts` |
 | `npm run db:migrate` | Applies pending migrations |
+| `npm run db:demo` | Creates or resets the local demo client and logins (see above) |
 
 ## Rules for client data
 
