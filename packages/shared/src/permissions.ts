@@ -18,6 +18,11 @@ export const PERMISSIONS = {
   INSTALLATION_MANAGE: 'installation.manage',
   /** Handle client feedback and service tickets. */
   TICKET_MANAGE: 'ticket.manage',
+  /**
+   * Add documents to the tenders they can see and make compliance letters.
+   * Viewers don't have it: they only read.
+   */
+  TENDER_DOCUMENTS: 'tender.documents',
   /** See the Installed assets page. Agents don't have it unless the admin turns it on. */
   ASSET_VIEW: 'asset.view',
 } as const
@@ -37,6 +42,7 @@ export const DEFAULT_ROLES: { key: DefaultRoleKey; name: string; permissions: Pe
     permissions: [
       PERMISSIONS.TENDER_VIEW_ASSIGNED,
       PERMISSIONS.TENDER_MOVE_STAGE,
+      PERMISSIONS.TENDER_DOCUMENTS,
       PERMISSIONS.REPORT_VIEW,
     ],
   },
@@ -45,6 +51,7 @@ export const DEFAULT_ROLES: { key: DefaultRoleKey; name: string; permissions: Pe
     name: 'Engineer',
     permissions: [
       PERMISSIONS.TENDER_VIEW_ASSIGNED,
+      PERMISSIONS.TENDER_DOCUMENTS,
       PERMISSIONS.INSTALLATION_MANAGE,
       PERMISSIONS.TICKET_MANAGE,
       PERMISSIONS.ASSET_VIEW,

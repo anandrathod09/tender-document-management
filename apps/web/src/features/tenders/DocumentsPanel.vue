@@ -20,6 +20,7 @@ const docs = ref<FileSummary[]>([])
 const error = ref('')
 const uploading = ref(false)
 
+const canAdd = auth.can(PERMISSIONS.TENDER_DOCUMENTS)
 const canDelete = (d: FileSummary) =>
   d.uploadedBy?.id === auth.user?.id || auth.can(PERMISSIONS.TENDER_ASSIGN)
 const viewable = (d: FileSummary) =>
@@ -74,7 +75,7 @@ const act = (fn: () => Promise<void>) => fn().catch((err) => (error.value = erro
 
 <template>
   <UiCard title="Tender Documents">
-    <template #header>
+    <template v-if="canAdd" #header>
       <label
         class="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md bg-blue-500 px-3 text-xs text-white hover:bg-blue-600"
       >
@@ -123,7 +124,11 @@ const act = (fn: () => Promise<void>) => fn().catch((err) => (error.value = erro
       </li>
     </ul>
     <p v-else class="text-theme-sm text-gray-500 dark:text-gray-400">
-      No documents yet. Add the tender document, BOQ, drawings or anything else the team needs.
+      {{
+        canAdd
+          ? 'No documents yet. Add the tender document, BOQ, drawings or anything else the team needs.'
+          : 'No documents yet.'
+      }}
     </p>
   </UiCard>
 </template>

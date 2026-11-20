@@ -4,6 +4,7 @@
  *   - owner panel: owner@demo.test / demo-owner-password
  *   - demo client "demo": admin@demo.test / demo-password-1
  *   - an Agent in the demo client: agent@demo.test / demo-password-1
+ *   - a Viewer (read only) in the demo client: viewer@demo.test / demo-password-1
  * plus a bidding company and a few sample tenders.
  *
  * Usage: npm run db:demo
@@ -39,7 +40,9 @@ export const DEMO = {
   adminEmail: 'admin@demo.test',
   adminPassword: 'demo-password-1',
   agentEmail: 'agent@demo.test',
-  agentPassword: 'demo-password-1',
+  viewerEmail: 'viewer@demo.test',
+  /** The agent's and viewer's password. */
+  memberPassword: 'demo-password-1',
 } as const
 
 function assertLocal() {
@@ -236,23 +239,19 @@ async function ensureTenders(orgId: string) {
   return result.created
 }
 
-/**
- * An Agent login, to see the app as an agent does (only their assigned
- * tenders, fewer menu items). If they have no tenders yet, the two oldest
- * unassigned ones are assigned to them.
- */
-async function ensureAgent(orgId: string) {
+/** Creates or resets a demo team member with a role and the demo password. */
+async function ensureMember(orgId: string, roleKey: string, email: string, name: string) {
   const [role] = await db
     .select()
     .from(roles)
-    .where(orgWhere(roles, orgId, eq(roles.key, 'agent')))
-  if (!role) return 0
-  const passwordHash = await hashPassword(DEMO.agentPassword)
-  let [agent] = await db
+    .where(orgWhere(roles, orgId, eq(roles.key, roleKey)))
+  if (!role) return null
+  const passwordHash = await hashPassword(DEMO.memberPassword)
+  const [existing] = await db
     .select()
     .from(users)
-    .where(orgWhere(users, orgId, eq(users.email, DEMO.agentEmail)))
-  if (agent) {
+    .where(orgWhere(users, orgId, eq(users.email, email)))
+  if (existing) {
     await db
       .update(users)
       .set({
@@ -264,25 +263,31 @@ async function ensureAgent(orgId: string) {
         totpSecret: null,
         totpEnabledAt: null,
       })
-      .where(orgWhere(users, orgId, eq(users.id, agent.id)))
-  } else {
-    await db.insert(users).values({
-      organizationId: orgId,
-      email: DEMO.agentEmail,
-      name: 'Demo Agent',
-      passwordHash,
-      roleId: role.id,
-      status: 'active',
-    })
-    ;[agent] = await db
-      .select()
-      .from(users)
-      .where(orgWhere(users, orgId, eq(users.email, DEMO.agentEmail)))
+      .where(orgWhere(users, orgId, eq(users.id, existing.id)))
+    return existing
   }
+  await db
+    .insert(users)
+    .values({ organizationId: orgId, email, name, passwordHash, roleId: role.id, status: 'active' })
+  const [created] = await db
+    .select()
+    .from(users)
+    .where(orgWhere(users, orgId, eq(users.email, email)))
+  return created!
+}
+
+/**
+ * An Agent login, to see the app as an agent does (only their assigned
+ * tenders, fewer menu items). If they have no tenders yet, the two oldest
+ * unassigned ones are assigned to them.
+ */
+async function ensureAgent(orgId: string) {
+  const agent = await ensureMember(orgId, 'agent', DEMO.agentEmail, 'Demo Agent')
+  if (!agent) return 0
   const [mine] = await db
     .select({ n: count() })
     .from(tenders)
-    .where(orgWhere(tenders, orgId, eq(tenders.assignedAgentId, agent!.id)))
+    .where(orgWhere(tenders, orgId, eq(tenders.assignedAgentId, agent.id)))
   if ((mine?.n ?? 0) > 0) return 0
   const free = await db
     .select({ id: tenders.id })
@@ -291,7 +296,7 @@ async function ensureAgent(orgId: string) {
     .orderBy(asc(tenders.createdAt))
     .limit(2)
   const auth = await adminAuth(orgId)
-  for (const t of free) await assignTender(auth, t.id, { agentId: agent!.id })
+  for (const t of free) await assignTender(auth, t.id, { agentId: agent.id })
   return free.length
 }
 
@@ -303,6 +308,7 @@ async function main() {
   await ensureCompany(org.id)
   const created = await ensureTenders(org.id)
   const assigned = await ensureAgent(org.id)
+  await ensureMember(org.id, 'viewer', DEMO.viewerEmail, 'Demo Viewer')
 
   const url = env.PUBLIC_URL_TEMPLATE.replace('{slug}', DEMO.slug)
   const ownerUrl = env.PUBLIC_URL_TEMPLATE.replace('{slug}', env.OWNER_SUBDOMAIN)
@@ -311,7 +317,8 @@ Demo ready${created ? ` (${created} sample tenders added)` : ''}
 
   Demo client   ${url}
                 ${DEMO.adminEmail} / ${DEMO.adminPassword}   (Admin)
-                ${DEMO.agentEmail} / ${DEMO.agentPassword}   (Agent${assigned ? `, ${assigned} tenders assigned` : ''})
+                ${DEMO.agentEmail} / ${DEMO.memberPassword}   (Agent${assigned ? `, ${assigned} tenders assigned` : ''})
+                ${DEMO.viewerEmail} / ${DEMO.memberPassword}   (Viewer, read only)
 
   Owner panel   ${ownerUrl}
                 ${DEMO.ownerEmail} / ${DEMO.ownerPassword}

@@ -56,15 +56,17 @@ To try the app straight away, create the demo data:
 npm run db:demo
 ```
 
-| Open                                                            | Email             | Password              |
-| --------------------------------------------------------------- | ----------------- | --------------------- |
-| http://demo.localhost:5173 (demo client "Demo Infra Pvt Ltd")   | `admin@demo.test` | `demo-password-1`     |
-| http://demo.localhost:5173 (same client, signed in as an Agent) | `agent@demo.test` | `demo-password-1`     |
-| http://owner.localhost:5173 (owner panel)                       | `owner@demo.test` | `demo-owner-password` |
+| Open                                                            | Email              | Password              |
+| --------------------------------------------------------------- | ------------------ | --------------------- |
+| http://demo.localhost:5173 (demo client "Demo Infra Pvt Ltd")   | `admin@demo.test`  | `demo-password-1`     |
+| http://demo.localhost:5173 (same client, signed in as an Agent) | `agent@demo.test`  | `demo-password-1`     |
+| http://demo.localhost:5173 (same client, signed in as a Viewer) | `viewer@demo.test` | `demo-password-1`     |
+| http://owner.localhost:5173 (owner panel)                       | `owner@demo.test`  | `demo-owner-password` |
 
 What the command does:
 
 - Adds a bidding company and 3 sample tenders, but only if the demo client has no tenders yet, so your work is never overwritten.
+- Creates the Viewer login (read only).
 - Creates the Agent login and, if the agent has no tenders yet, assigns the two oldest unassigned tenders to them.
 - Running it again resets these logins, for example after trying two-step login.
 
@@ -147,20 +149,22 @@ On the tender list, the quick actions follow the client's own stages: Add to wat
 
 ## Roles and what each person sees
 
-Every client starts with four roles. An Agent, Engineer or Viewer signs in at the same address as the admin and sees the same screens, with the menu and the data limited by their role.
+Every client starts with four roles. Each person has their own login: the admin adds them on the Users page with a role, and they choose their password from the invitation email. An Agent, Engineer or Viewer signs in at the same address as the admin and sees the same screens, with the menu and the data limited by their role.
 
-|                                                                      | Admin                                              | Agent                                            | Engineer                                         | Viewer          |
-| -------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------ | --------------- |
-| Tenders they see                                                     | all                                                | only those assigned to them                      | those where they are the engineer on a consignee | all (read only) |
-| Dashboard and stage counts                                           | all tenders                                        | their own tenders                                | their own tenders                                | all tenders     |
-| Move a tender to another stage                                       | yes, following the [move rules](#stage-move-rules) | yes, their own tenders, following the move rules | no                                               | no              |
-| Assign tenders, watchlist, reject                                    | yes                                                | no                                               | no                                               | no              |
-| Upload Excel, export to Excel                                        | yes                                                | no                                               | no                                               | no              |
-| Add documents and make compliance letters on a tender                | yes                                                | yes, on their tenders                            | yes, on their tenders                            | yes             |
-| Installation reports, service tickets                                | yes                                                | no                                               | yes                                              | no              |
-| Installed assets page                                                | yes                                                | **hidden by default** (see below)                | yes                                              | yes             |
-| Reports                                                              | yes                                                | yes                                              | no                                               | yes             |
-| Users, Workflow stages, Bidding companies, Letter templates, Billing | yes                                                | no                                               | no                                               | no              |
+|                                                                      | Admin                                              | Agent                                            | Engineer                                         | Viewer                          |
+| -------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------ | ------------------------------- |
+| Tenders they see                                                     | all                                                | only those assigned to them                      | those where they are the engineer on a consignee | all                             |
+| Dashboard and stage counts                                           | all tenders                                        | their own tenders                                | their own tenders                                | all tenders                     |
+| Move a tender to another stage                                       | yes, following the [move rules](#stage-move-rules) | yes, their own tenders, following the move rules | no                                               | no                              |
+| Assign tenders, watchlist, reject                                    | yes                                                | no                                               | no                                               | no                              |
+| Upload Excel, export to Excel                                        | yes                                                | no                                               | no                                               | no                              |
+| Add documents and make compliance letters on a tender                | yes                                                | yes, on their tenders                            | yes, on their tenders                            | no (can open and download them) |
+| Installation reports, service tickets                                | yes                                                | no                                               | yes                                              | no                              |
+| Installed assets page                                                | yes                                                | **hidden by default** (see below)                | yes                                              | yes                             |
+| Reports                                                              | yes                                                | yes                                              | no                                               | yes                             |
+| Users, Workflow stages, Bidding companies, Letter templates, Billing | yes                                                | no                                               | no                                               | no                              |
+
+**Viewer** is read only, for people who follow the bids without working on them (an owner, a director, an accountant). They see every tender, its documents, compliance PDFs, installation reports, reports and installed assets, but cannot change anything: no moving, assigning, uploading, letters or settings. The original TMS had no such role, so migrated clients simply don't use it until they add someone as a Viewer.
 
 **Installed assets for agents.** The page is hidden from agents unless the admin turns on **Agents see Installed assets** on the Users page. The switch adds or removes the `asset.view` permission on the Agent role, and agents see the change the next time they load the app.
 

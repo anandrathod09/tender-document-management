@@ -165,4 +165,40 @@ describe('stage move rules', () => {
       .send({ agentsSeeAssets: false })
     expect((await assets(agent.token)).status).toBe(403)
   })
+
+  it('a viewer reads everything but cannot change anything', async () => {
+    const viewer = await addUser(ACME, adminToken, 'viewer', 'viewer@acme.test')
+    const as = (method: 'get' | 'post' | 'patch', path: string) =>
+      request(app)[method](`/api${path}`).set('Host', ACME).set(bearer(viewer.token))
+
+    // Reads: every tender, its documents and compliance PDFs, reports, assets.
+    expect((await listAll(ACME, viewer.token)).items).toHaveLength(2)
+    expect((await as('get', `/tenders/${tender.id}`)).status).toBe(200)
+    expect((await as('get', `/tenders/${tender.id}/documents`)).status).toBe(200)
+    expect((await as('get', `/tenders/${tender.id}/compliance-packs`)).status).toBe(200)
+    expect(
+      (await as('get', '/reports/summary').query({ from: inDays(-30), to: inDays(0) })).status,
+    ).toBe(200)
+    expect((await as('get', '/assets')).status).toBe(200)
+
+    // Changes: all refused.
+    const upload = await as('post', `/tenders/${tender.id}/documents`).attach(
+      'file',
+      Buffer.from('%PDF-1.4 test'),
+      'boq.pdf',
+    )
+    expect(upload.status).toBe(403)
+    expect((await as('post', `/tenders/${tender.id}/compliance-packs`).send({})).status).toBe(403)
+    expect(
+      (await as('post', `/tenders/${tender.id}/move`).send({ stageId: stages['in-progress']!.id }))
+        .status,
+    ).toBe(403)
+    expect((await as('post', `/tenders/${tender.id}/assign`).send({ agentId: null })).status).toBe(
+      403,
+    )
+    expect(
+      (await as('patch', `/tenders/${tender.id}`).send({ biddingCompanyId: null })).status,
+    ).toBe(403)
+    expect((await as('post', '/tenders/import')).status).toBe(403)
+  })
 })

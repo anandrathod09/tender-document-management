@@ -92,6 +92,13 @@
       "when": 1795214366454,
       "tag": "0012_stage_move_rules",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1795215260346,
+      "tag": "0013_tender_documents_permission",
+      "breakpoints": true
     }
   ]
 }

@@ -152,39 +152,48 @@ tendersRouter.patch('/:id', requirePermission(PERMISSIONS.TENDER_MOVE_STAGE), as
   res.json(await updateTender(tenantAuth(req), req.params.id as string, input))
 })
 
-// Documents attached to a tender (anyone who can see the tender can add them).
+// Documents attached to a tender: everyone who can see it can read them; adding needs the permission.
 tendersRouter.get('/:id/documents', async (req, res) => {
   const auth = tenantAuth(req)
   const tender = await getVisibleTender(db, auth, req.params.id as string)
   res.json(await listFiles(auth.org.id, { kind: 'tender_document', tenderId: tender.id }))
 })
 
-tendersRouter.post('/:id/documents', fileUpload.single('file'), async (req, res) => {
-  const auth = tenantAuth(req)
-  const tender = await getVisibleTender(db, auth, req.params.id as string)
-  if (!req.file) throw badRequest('FILE_REQUIRED', 'Choose a file to upload')
-  const title = typeof req.body?.title === 'string' ? req.body.title.slice(0, 200) : undefined
-  const file = await storeFile(db, {
-    organizationId: auth.org.id,
-    kind: 'tender_document',
-    bytes: req.file.buffer,
-    originalName: req.file.originalname,
-    title,
-    tenderId: tender.id,
-    uploadedBy: auth.user.id,
-  })
-  res.status(201).json(toFileSummary(file, auth.user.name))
-})
+tendersRouter.post(
+  '/:id/documents',
+  requirePermission(PERMISSIONS.TENDER_DOCUMENTS),
+  fileUpload.single('file'),
+  async (req, res) => {
+    const auth = tenantAuth(req)
+    const tender = await getVisibleTender(db, auth, req.params.id as string)
+    if (!req.file) throw badRequest('FILE_REQUIRED', 'Choose a file to upload')
+    const title = typeof req.body?.title === 'string' ? req.body.title.slice(0, 200) : undefined
+    const file = await storeFile(db, {
+      organizationId: auth.org.id,
+      kind: 'tender_document',
+      bytes: req.file.buffer,
+      originalName: req.file.originalname,
+      title,
+      tenderId: tender.id,
+      uploadedBy: auth.user.id,
+    })
+    res.status(201).json(toFileSummary(file, auth.user.name))
+  },
+)
 
 // Compliance PDFs: declaration letters on the company letterhead plus chosen documents.
 tendersRouter.get('/:id/compliance-packs', async (req, res) => {
   res.json(await listPacks(tenantAuth(req), req.params.id as string))
 })
 
-tendersRouter.post('/:id/compliance-packs', async (req, res) => {
-  const input = parse(createCompliancePackSchema, req.body)
-  res.status(202).json(await requestPack(tenantAuth(req), req.params.id as string, input))
-})
+tendersRouter.post(
+  '/:id/compliance-packs',
+  requirePermission(PERMISSIONS.TENDER_DOCUMENTS),
+  async (req, res) => {
+    const input = parse(createCompliancePackSchema, req.body)
+    res.status(202).json(await requestPack(tenantAuth(req), req.params.id as string, input))
+  },
+)
 
 /** Saved Excel layouts (import profiles) for files that are not Tender247 exports. */
 export const importProfilesRouter = Router()

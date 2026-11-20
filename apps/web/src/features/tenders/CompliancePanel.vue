@@ -9,6 +9,8 @@ import UiCard from '@/components/ui/UiCard.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import { api, errorMessage } from '@/services/api'
 import { downloadFile, formatBytes, openFile } from '@/services/files'
+import { PERMISSIONS } from '@tdm/shared/permissions'
+import { useAuthStore } from '@/stores/auth'
 import { formatDateTime } from '@/utils/format'
 import ComplianceModal from './ComplianceModal.vue'
 
@@ -18,6 +20,7 @@ const props = defineProps<{
   tenderDocs: FileSummary[]
 }>()
 
+const canMake = useAuthStore().can(PERMISSIONS.TENDER_DOCUMENTS)
 const packs = ref<CompliancePackSummary[]>([])
 const error = ref('')
 const modalOpen = ref(false)
@@ -54,7 +57,7 @@ const act = (fn: () => Promise<void>) => fn().catch((err) => (error.value = erro
 
 <template>
   <UiCard title="Compliance Documents">
-    <template #header>
+    <template v-if="canMake" #header>
       <UiButton size="xs" :disabled="!companies.some((c) => c.isActive)" @click="modalOpen = true">
         <FileStack class="size-4" aria-hidden="true" /> Generate PDF
       </UiButton>
