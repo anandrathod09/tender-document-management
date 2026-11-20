@@ -1,0 +1,1 @@
+ALTER TABLE `plans` ADD `max_companies` int DEFAULT 3 NOT NULL;
