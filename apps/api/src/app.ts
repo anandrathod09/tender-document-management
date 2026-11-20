@@ -10,6 +10,7 @@ import { authRouter } from './modules/auth/routes'
 import { billingRouter, ownerBillingRouter, razorpayWebhookHandler } from './modules/billing/routes'
 import { companiesRouter } from './modules/companies/routes'
 import { lettersRouter } from './modules/letters/routes'
+import { mailOutboxRouter } from './modules/dev/mail-outbox'
 import { filesRouter, libraryRouter } from './modules/files/routes'
 import { notificationsRouter } from './modules/notifications/routes'
 import { assetsRouter, installationRouter } from './modules/installation/routes'
@@ -41,6 +42,8 @@ export function createApp() {
 
   const api = express.Router()
   api.use(workspaceContext)
+  // Local development only: the emails the app would have sent.
+  if (env.NODE_ENV === 'development') api.use('/dev/mail', mailOutboxRouter)
   api.use('/workspace', workspaceRouter)
   api.use('/auth', authRouter)
   api.use('/users', usersRouter)

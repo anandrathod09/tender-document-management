@@ -1,3 +1,5 @@
+import { mkdir, writeFile } from 'node:fs/promises'
+import { join, resolve } from 'node:path'
 import nodemailer, { type Transporter } from 'nodemailer'
 import { env } from '../config/env'
 import type { DbOrTx } from '../db/client'
@@ -7,7 +9,10 @@ import { logger } from './logger'
 export interface Mail {
   to: string
   subject: string
+  /** Plain-text version (always sent too, for email programs that prefer it). */
   text: string
+  /** The designed version (lib/email-templates.ts). */
+  html?: string
   /** Shown as the sender name, e.g. the client's name. */
   fromName?: string
   /** Where replies go, e.g. the client's own address. */
@@ -47,9 +52,15 @@ export async function deliverMail(mail: Mail): Promise<void> {
     return
   }
   if (!transporter) {
-    logger.info({ to: mail.to, subject: mail.subject }, 'Email (not sent, no SMTP configured)')
+    // No email server set up (local development): keep a copy to look at instead.
+    const file = await saveToOutbox(mail)
+    logger.info(
+      { to: mail.to, subject: mail.subject, file },
+      'Email (not sent, no SMTP configured)',
+    )
     console.log(
-      `\n----- EMAIL to ${mail.to} -----\nSubject: ${mail.subject}\n\n${mail.text}\n-----\n`,
+      `\n----- EMAIL to ${mail.to} -----\nSubject: ${mail.subject}\n\n${mail.text}\n` +
+        `View it designed: ${env.PUBLIC_URL_TEMPLATE.replace('{slug}', env.OWNER_SUBDOMAIN)}/api/dev/mail\n-----\n`,
     )
     return
   }
@@ -60,7 +71,24 @@ export async function deliverMail(mail: Mail): Promise<void> {
     replyTo: mail.replyTo,
     subject: mail.subject,
     text: mail.text,
+    html: mail.html,
   })
+}
+
+/** Where emails go when no SMTP server is configured: STORAGE_DIR/mail-outbox. */
+export const outboxDir = () => resolve(process.cwd(), env.STORAGE_DIR, 'mail-outbox')
+
+async function saveToOutbox(mail: Mail): Promise<string> {
+  const dir = outboxDir()
+  await mkdir(dir, { recursive: true })
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
+  const slug = mail.subject
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .slice(0, 50)
+  const name = `${stamp}_${slug}.json`
+  await writeFile(join(dir, name), JSON.stringify({ ...mail, at: new Date().toISOString() }))
+  return name
 }
 
 registerJob('email.send', async (payload) => {

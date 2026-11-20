@@ -43,10 +43,10 @@ npm run dev
 
 This starts the API on port 4000 and the web app on port 5173. Browsers send any `*.localhost` address to your own computer, so you can open:
 
-| Address | What it is |
-| --- | --- |
-| http://owner.localhost:5173 | Owner panel: create and manage clients |
-| http://acme.localhost:5173 | Client "acme" (after you create it in the owner panel) |
+| Address                     | What it is                                             |
+| --------------------------- | ------------------------------------------------------ |
+| http://owner.localhost:5173 | Owner panel: create and manage clients                 |
+| http://acme.localhost:5173  | Client "acme" (after you create it in the owner panel) |
 
 ### Demo logins (local only)
 
@@ -56,12 +56,13 @@ To try the app straight away, create the demo data:
 npm run db:demo
 ```
 
-| Open | Email | Password |
-| --- | --- | --- |
-| http://demo.localhost:5173 (demo client "Demo Infra Pvt Ltd") | `admin@demo.test` | `demo-password-1` |
-| http://owner.localhost:5173 (owner panel) | `owner@demo.test` | `demo-owner-password` |
+| Open                                                          | Email             | Password              |
+| ------------------------------------------------------------- | ----------------- | --------------------- |
+| http://demo.localhost:5173 (demo client "Demo Infra Pvt Ltd") | `admin@demo.test` | `demo-password-1`     |
+| http://owner.localhost:5173 (owner panel)                     | `owner@demo.test` | `demo-owner-password` |
 
 What the command does:
+
 - Adds a bidding company and 3 sample tenders, but only if the demo client has no tenders yet, so your work is never overwritten.
 - Running it again resets these two logins, for example after trying two-step login.
 
@@ -71,15 +72,15 @@ Without SMTP settings, emails (such as invitations) are printed in the API conso
 
 ## Everyday commands
 
-| Command | What it does |
-| --- | --- |
-| `npm run dev` | API and web app with live reload |
-| `npm test` | API tests (uses the `_test` database and wipes it) |
-| `npm run typecheck` | Type-checks all packages |
-| `npm run build` | Production builds of the API and web app |
-| `npm run db:generate -- --name <change>` | Creates a migration after editing `apps/api/src/db/schema.ts` |
-| `npm run db:migrate` | Applies pending migrations |
-| `npm run db:demo` | Creates or resets the local demo client and logins (see above) |
+| Command                                  | What it does                                                   |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| `npm run dev`                            | API and web app with live reload                               |
+| `npm test`                               | API tests (uses the `_test` database and wipes it)             |
+| `npm run typecheck`                      | Type-checks all packages                                       |
+| `npm run build`                          | Production builds of the API and web app                       |
+| `npm run db:generate -- --name <change>` | Creates a migration after editing `apps/api/src/db/schema.ts`  |
+| `npm run db:migrate`                     | Applies pending migrations                                     |
+| `npm run db:demo`                        | Creates or resets the local demo client and logins (see above) |
 
 ## Rules for client data
 
@@ -92,19 +93,20 @@ Without SMTP settings, emails (such as invitations) are printed in the API conso
 
 Screens follow the original TMS closely, at about 90% the same look and flow, so clients moving over recognise them. Use the shared pieces in `components/ui/` rather than styling a screen by hand:
 
-| Piece | Use it for |
-| --- | --- |
-| `PageHeader` | The page title with its icon |
-| `UiCard` | Every block of a page: title bar, then body, then an optional footer. Filters and buttons go in its `#header` slot. |
-| `DataTable` + `UiPagination` | Lists. Pagination shows "Showing 1-20 of 57 …", round page buttons and 5/10/20/50 rows per page. |
-| `UiStatCard` | Count tiles (dashboard, users) |
-| `UiModal` | Popups: title bar, a body that scrolls, and a footer with grey Cancel and blue or red action buttons |
-| `ModalCallout`, `ModalNote`, `UiTextarea` | The coloured notice strip, the blue "Note:" box and the notes field inside popups |
-| `UiBadge`, `StageBadge` | Solid badges in the old colours |
+| Piece                                     | Use it for                                                                                                          |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `PageHeader`                              | The page title with its icon                                                                                        |
+| `UiCard`                                  | Every block of a page: title bar, then body, then an optional footer. Filters and buttons go in its `#header` slot. |
+| `DataTable` + `UiPagination`              | Lists. Pagination shows "Showing 1-20 of 57 …", round page buttons and 5/10/20/50 rows per page.                    |
+| `UiStatCard`                              | Count tiles (dashboard, users)                                                                                      |
+| `UiModal`                                 | Popups: title bar, a body that scrolls, and a footer with grey Cancel and blue or red action buttons                |
+| `ModalCallout`, `ModalNote`, `UiTextarea` | The coloured notice strip, the blue "Note:" box and the notes field inside popups                                   |
+| `UiBadge`, `StageBadge`                   | Solid badges in the old colours                                                                                     |
 
 Cards use `rounded-md`, and boxes inside them use `rounded-lg`.
 
 Each page shows its name once:
+
 - **List pages** (tenders, users, library, assets, tickets, clients, import, stages): the main card's title bar is the page title (`<UiCard :level="1">`), with the filters and buttons beside it.
 - **Detail pages** (tender, installation report, ticket): a breadcrumb, then one heading.
 - **All pages** use the full width of the screen.
@@ -114,6 +116,7 @@ The tender popups are `AssignTendersDialog` and `MoveTendersDialog`; the move di
 ## Tables and actions
 
 Every list uses `components/ui/DataTable.vue`, so tables look and behave the same everywhere:
+
 - sortable headings
 - tick boxes for working on several rows
 - grey pinned columns: the tick box and first column on the left, Actions on the right. They stay in view while the table scrolls sideways.
@@ -141,12 +144,14 @@ On the tender list, the quick actions follow the client's own stages: Add to wat
 ## Workflow stages
 
 Client admins manage stages under Manage → Workflow stages. They can:
+
 - rename, recolour and reorder stages
 - choose when a comment is needed
 - show or hide stages
 - add their own stages
 
 A stage's **kind** decides how reports, the dashboard and the deadline rules treat it. Renaming or reordering therefore never breaks anything.
+
 - **Default stages** keep their key (so `watchlist`, `rejected` and so on still work after renaming) and can only be hidden.
 - **Custom stages** can be deleted until a tender has used them.
 
@@ -155,16 +160,19 @@ API: `GET/POST /api/workflow/stages`, `PATCH/DELETE /api/workflow/stages/:id`, `
 ## Two-step login
 
 Anyone (client users and the owner panel) can turn on two-step login under the user menu → **My Security**:
+
 1. Scan a QR code with an authenticator app.
 2. Confirm with a code.
 3. Save 10 one-time backup codes.
 
 **How it works**
+
 - After the password, `/api/auth/login` returns `{ twoFactorRequired, challengeToken }`. The challenge is valid for 5 minutes and is not an access token. `/api/auth/login/2fa` exchanges it, together with a code, for a session.
 - Each code from the app is accepted once.
 - The app keys are stored encrypted with `ENCRYPTION_KEY` (`apps/api/src/lib/secrets.ts`).
 
 **Admin controls (Users page)**
+
 - **Require 2-step login:** turns on the workspace setting `PATCH /api/workspace/settings`. The admin must have it on themselves first. Until a user sets it up, only `/api/auth/*` works for them and the app keeps them on My Security.
 - **Reset Two-Step Login:** for someone who lost their phone. It turns two-step login off for that person and signs them out.
 
@@ -173,16 +181,19 @@ Anyone (client users and the owner panel) can turn on two-step login under the u
 Clients can add their own declaration letters for compliance PDFs, under Manage → Letter templates (needs `company.manage`).
 
 **Writing a letter**
+
 - The text is built from blocks: paragraph, heading, centred line, numbered or bullet list, and "Label: value" lines.
 - Fill-in fields such as `{{company_name}}` and `{{tender_ref}}` are inserted with buttons. They are listed in `packages/shared/src/letters.ts`.
 - **Preview PDF** shows the letter on the real letterhead, with sample tender details.
 
 **Options**
+
 - A letter is shared by all bidding companies, or limited to one.
 - A built-in letter can be copied and its wording edited; the original stays unchanged.
 - Built-in letters the client never uses can be hidden from the compliance list.
 
 **How it works**
+
 - Saving refuses unknown fields, so a typo like `{{compnay_name}}` is caught.
 - When a compliance PDF is requested, the chosen letters are copied into the request. Editing or deleting a letter afterwards never changes a PDF that was already asked for.
 - Unlimited on every plan.
@@ -190,10 +201,12 @@ Clients can add their own declaration letters for compliance PDFs, under Manage 
 ## Plans and billing
 
 **Owner panel**
+
 - **Plans:** limits (users, storage, tenders per month, active bidding companies), plus monthly and yearly prices before GST. A plan with no price shows "Price on request". A plan can be public or private, and active or retired.
 - **Client page → Billing & Payments:** records bank transfers and cheques, and downloads invoices.
 
 **Clients: Manage → Billing** (needs `settings.manage`)
+
 - Shows the plan and usage, and the trial, paid, grace or expired status.
 - Holds the "bill to" details, used for GST.
 - Lets the client choose a plan and pay through Razorpay.
@@ -201,7 +214,8 @@ Clients can add their own declaration letters for compliance PDFs, under Manage 
 - When `RAZORPAY_KEY_ID` and `RAZORPAY_KEY_SECRET` are not set, clients are asked to contact us instead.
 
 **How it works**
-- **Limits** are checked when something is added: inviting a user, uploading a file, importing tenders, and adding or reactivating a bidding company. Only *active* companies count, so marking one inactive frees a slot. `GET /api/companies/limit` returns `{ used, max }`.
+
+- **Limits** are checked when something is added: inviting a user, uploading a file, importing tenders, and adding or reactivating a bidding company. Only _active_ companies count, so marking one inactive frees a slot. `GET /api/companies/limit` returns `{ used, max }`.
 - **Paying:** `POST /api/billing/checkout` creates a `payments` row and a Razorpay order. The browser opens Razorpay checkout, then `POST /api/billing/confirm` checks the payment signature. `POST /api/billing/webhook` (raw body, `X-Razorpay-Signature`) confirms payments even if the browser closed. A payment is applied once, however many times it is confirmed.
 - **What a payment does:**
   - The new period starts when the current paid period, or the trial, ends.
@@ -215,6 +229,22 @@ Clients can add their own declaration letters for compliance PDFs, under Manage 
   - Suspends a client after the grace period only when `BILLING_AUTO_SUSPEND=true`.
   - A suspended client can't open the Billing page, so after a manual payment, reactivate them in the owner panel.
 - **Settings:** all billing settings are in `apps/api/.env.example` under "Billing".
+
+## Emails
+
+The app sends these emails, each as a designed HTML email in the old TMS style plus a plain-text copy:
+
+| Email                              | Sent when                                                                               | Colour      |
+| ---------------------------------- | --------------------------------------------------------------------------------------- | ----------- |
+| Invitation ("You're invited to …") | an admin adds a user, or clicks Resend Invitation; also the first admin of a new client | blue        |
+| Password reset                     | someone uses "Forgot password?" on the sign-in page                                     | red         |
+| Renewal reminder                   | a client's trial or paid plan is about to end, or has ended                             | amber / red |
+
+The layout and its pieces (header band, button, details box, note) are in `apps/api/src/lib/email-templates.ts`. Every value put into an email is escaped.
+
+**Seeing them locally.** With `SMTP_HOST` empty, nothing is sent: each email is saved to `apps/api/storage/mail-outbox/` and printed in the API console. Open http://owner.localhost:5173/api/dev/mail to see the list and each email exactly as it would arrive. This page exists only when `NODE_ENV=development`.
+
+**Sending real emails.** Fill in `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS` and `MAIL_FROM_ADDRESS` in `apps/api/.env` (Brevo, Amazon SES, Postmark, Zoho or Gmail all give SMTP details), then restart the API. For a live server, set up SPF and DKIM for the sending domain so emails don't land in spam.
 
 ## Background jobs
 

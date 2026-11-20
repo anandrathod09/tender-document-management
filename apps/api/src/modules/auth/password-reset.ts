@@ -5,6 +5,7 @@ import { orgWhere } from '../../db/scope'
 import { passwordResets, platformUsers, users } from '../../db/schema'
 import { writeAudit } from '../../lib/audit'
 import { badRequest } from '../../lib/errors'
+import { button, COLORS, fallbackLink, layout, note, p } from '../../lib/email-templates'
 import { queueMail } from '../../lib/mailer'
 import { hashPassword } from '../../lib/password'
 import { randomToken, sha256 } from '../../lib/tokens'
@@ -72,6 +73,27 @@ export async function requestPasswordReset(ctx: RequestContext, email: string): 
           `The link works for ${RESET_TTL_MINUTES} minutes and only once.`,
           'If you did not ask for this, ignore this email: your password stays the same.',
         ].join('\n'),
+        html: layout({
+          heading: 'Password Reset Request',
+          subheading: fromName ? `${fromName} · ${env.PRODUCT_NAME}` : env.PRODUCT_NAME,
+          color: COLORS.red,
+          preheader: 'Choose a new password',
+          body: [
+            p(`Hello ${subject.name},`),
+            p(
+              'We received a request to reset your password. Click the button below to choose a new one:',
+            ),
+            button(url, 'Reset Password', COLORS.red),
+            note(
+              'Note:',
+              `This link expires in ${RESET_TTL_MINUTES} minutes and works only once, for your security.`,
+              'red',
+            ),
+            p('If you did not ask for this, ignore this email: your password stays the same.'),
+            fallbackLink(url),
+            '<p style="margin:0;font-size:13px;color:#666666;"><em>This link is unique to you. Do not share it with others.</em></p>',
+          ].join(''),
+        }),
       },
       orgId,
     )

@@ -53,6 +53,9 @@ describe('owner panel', () => {
     expect(testOutbox).toHaveLength(1)
     expect(testOutbox[0]!.to).toBe('asha@acme.test')
     expect(testOutbox[0]!.text).toContain(res.body.inviteUrl)
+    // The designed version has the same link behind the button.
+    expect(testOutbox[0]!.html).toContain(`href="${res.body.inviteUrl}"`)
+    expect(testOutbox[0]!.html).toContain('Set Up Your Account')
 
     const list = await request(app)
       .get('/api/owner/organizations')

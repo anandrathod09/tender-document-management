@@ -45,6 +45,8 @@ describe('forgot password', () => {
     expect(testOutbox).toHaveLength(1)
     expect(testOutbox[0]!.text).toContain('http://acme.localhost:5173/reset-password?token=')
     const token = linkToken(testOutbox[0]!.text)
+    expect(testOutbox[0]!.html).toContain(`reset-password?token=${token}`)
+    expect(testOutbox[0]!.html).toContain('Reset Password')
 
     const reset = await request(app)
       .post('/api/auth/reset-password')

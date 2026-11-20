@@ -3,6 +3,16 @@ import { env } from '../../config/env'
 import type { DbOrTx } from '../../db/client'
 import { orgWhere } from '../../db/scope'
 import { users, type Organization } from '../../db/schema'
+import {
+  button,
+  COLORS,
+  details,
+  esc,
+  fallbackLink,
+  layout,
+  note,
+  p,
+} from '../../lib/email-templates'
 import { queueMail } from '../../lib/mailer'
 import { randomToken, sha256 } from '../../lib/tokens'
 
@@ -57,6 +67,33 @@ export async function sendInviteEmail(
         '',
         `The link works for ${INVITE_TTL_HOURS} hours.`,
       ].join('\n'),
+      html: layout({
+        heading: env.PRODUCT_NAME,
+        subheading: `${org.name} · Account setup`,
+        color: COLORS.blue,
+        preheader: `Set up your account for ${org.name}`,
+        body: [
+          `<h2 style="margin:0 0 14px 0;font-size:20px;color:${COLORS.blue};">Welcome, ${esc(to.name)}!</h2>`,
+          p(`An account has been created for you at ${org.name} by an administrator.`),
+          details(
+            'Your sign-in details',
+            [
+              ['Email', to.email],
+              ['Sign-in address', workspaceUrl(org.slug)],
+            ],
+            COLORS.blue,
+          ),
+          p('To finish setting up your account and choose your password, click the button below:'),
+          button(inviteUrl, 'Set Up Your Account', COLORS.blue),
+          note(
+            'Important:',
+            `Please complete your account setup within ${INVITE_TTL_HOURS} hours.`,
+          ),
+          p(`If you did not expect this, or need help, contact the administrator at ${org.name}.`),
+          fallbackLink(inviteUrl),
+          '<p style="margin:0;font-size:13px;color:#666666;"><em>This link is unique to you. Do not share it with others.</em></p>',
+        ].join(''),
+      }),
     },
     org.id,
   )

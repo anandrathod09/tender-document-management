@@ -33,6 +33,7 @@ import {
 } from '../../db/schema'
 import { writeAudit } from '../../lib/audit'
 import { badRequest, conflict, isDuplicateKeyError, notFound } from '../../lib/errors'
+import { button, COLORS, details, layout, note, p } from '../../lib/email-templates'
 import { queueMail } from '../../lib/mailer'
 import type { TenantAuth } from '../../types/express'
 import { notify } from '../notifications/service'
@@ -654,6 +655,32 @@ export async function runBillingChecks(
                 '',
                 env.PRODUCT_NAME,
               ].join('\n'),
+              html: layout({
+                heading: daysLeft > 0 ? 'Renewal Reminder' : 'Your Plan Has Ended',
+                subheading: `${org.name} · ${env.PRODUCT_NAME}`,
+                color: daysLeft > 0 ? COLORS.amber : COLORS.red,
+                preheader: `Your ${what} ${daysLeft > 0 ? `ends on ${when}` : 'has ended'}`,
+                body: [
+                  p('Hello,'),
+                  p(
+                    daysLeft > 0
+                      ? `The ${what} for ${org.name} ends soon. Renew now to keep using the workspace without interruption.`
+                      : `The ${what} for ${org.name} has ended. Renew to continue using the workspace.`,
+                  ),
+                  details(
+                    'Your plan',
+                    [
+                      ['Workspace', org.name],
+                      [daysLeft > 0 ? 'Ends on' : 'Ended on', when],
+                    ],
+                    COLORS.amber,
+                  ),
+                  button(`${workspaceUrl(org.slug)}/billing`, 'Renew Now', COLORS.blue),
+                  env.BILLING_SUPPORT_EMAIL
+                    ? note('Questions?', `Write to ${env.BILLING_SUPPORT_EMAIL}.`)
+                    : '',
+                ].join(''),
+              }),
             },
             org.id,
           )
