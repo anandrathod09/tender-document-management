@@ -56,19 +56,23 @@ To try the app straight away, create the demo data:
 npm run db:demo
 ```
 
-| Open                                                          | Email             | Password              |
-| ------------------------------------------------------------- | ----------------- | --------------------- |
-| http://demo.localhost:5173 (demo client "Demo Infra Pvt Ltd") | `admin@demo.test` | `demo-password-1`     |
-| http://owner.localhost:5173 (owner panel)                     | `owner@demo.test` | `demo-owner-password` |
+| Open                                                            | Email             | Password              |
+| --------------------------------------------------------------- | ----------------- | --------------------- |
+| http://demo.localhost:5173 (demo client "Demo Infra Pvt Ltd")   | `admin@demo.test` | `demo-password-1`     |
+| http://demo.localhost:5173 (same client, signed in as an Agent) | `agent@demo.test` | `demo-password-1`     |
+| http://owner.localhost:5173 (owner panel)                       | `owner@demo.test` | `demo-owner-password` |
 
 What the command does:
 
 - Adds a bidding company and 3 sample tenders, but only if the demo client has no tenders yet, so your work is never overwritten.
-- Running it again resets these two logins, for example after trying two-step login.
+- Creates the Agent login and, if the agent has no tenders yet, assigns the two oldest unassigned tenders to them.
+- Running it again resets these logins, for example after trying two-step login.
+
+**Seeing the app as an agent.** There is no separate agent app. An Agent signs in at the same address and sees the same screens, limited by their role: only the tenders assigned to them (in the list, the stage pages and the dashboard counts), and no Users, Settings, Upload or Billing pages. To try it, sign in as `agent@demo.test` in a private window, or assign a tender to "Demo Agent" as the admin and watch it appear on the agent's side.
 
 These passwords are public, so the command **refuses to run** when `NODE_ENV=production` or `BASE_DOMAIN` is not `localhost`. Real owner accounts come from `npm run db:seed`, which prints a random password once.
 
-Without SMTP settings, emails (such as invitations) are printed in the API console instead of being sent. The owner panel and the Users page also show each invitation link so you can copy it.
+Without SMTP settings, emails (such as invitations) are kept locally instead of being sent: see [Emails](#emails). The owner panel and the Users page also show each invitation link so you can copy it.
 
 ## Everyday commands
 

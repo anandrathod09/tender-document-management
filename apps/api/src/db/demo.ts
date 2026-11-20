@@ -3,6 +3,7 @@
  * that are documented in the README:
  *   - owner panel: owner@demo.test / demo-owner-password
  *   - demo client "demo": admin@demo.test / demo-password-1
+ *   - an Agent in the demo client: agent@demo.test / demo-password-1
  * plus a bidding company and a few sample tenders.
  *
  * Usage: npm run db:demo
@@ -11,12 +12,14 @@
  * these public passwords can never exist on a live server.
  */
 import ExcelJS from 'exceljs'
-import { asc, count, eq } from 'drizzle-orm'
+import { asc, count, eq, isNull } from 'drizzle-orm'
 import { env } from '../config/env'
 import { addDays, todayIn } from '../lib/dates'
 import { hashPassword } from '../lib/password'
 import { provisionOrganization } from '../modules/owner/service'
 import { importTenders } from '../modules/tenders/import'
+import { assignTender } from '../modules/tenders/service'
+import type { TenantAuth } from '../types/express'
 import { db, pool } from './client'
 import { orgWhere } from './scope'
 import {
@@ -35,6 +38,8 @@ export const DEMO = {
   slug: 'demo',
   adminEmail: 'admin@demo.test',
   adminPassword: 'demo-password-1',
+  agentEmail: 'agent@demo.test',
+  agentPassword: 'demo-password-1',
 } as const
 
 function assertLocal() {
@@ -206,10 +211,8 @@ async function sampleSheet(): Promise<Buffer> {
   return Buffer.from(await wb.xlsx.writeBuffer())
 }
 
-/** Adds the sample tenders only to an empty demo client, so existing work is never changed. */
-async function ensureTenders(orgId: string) {
-  const [existing] = await db.select({ n: count() }).from(tenders).where(orgWhere(tenders, orgId))
-  if ((existing?.n ?? 0) > 0) return 0
+/** Acts as the demo admin, so demo data goes through the normal app rules. */
+async function adminAuth(orgId: string): Promise<TenantAuth> {
   const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId))
   const [user] = await db
     .select()
@@ -219,11 +222,77 @@ async function ensureTenders(orgId: string) {
     .select()
     .from(roles)
     .where(orgWhere(roles, orgId, eq(roles.id, user!.roleId)))
-  const result = await importTenders(
-    { org: org!, user: user!, role: role!, permissions: new Set(role!.permissions) },
-    { buffer: await sampleSheet(), originalname: 'Demo-Tenders.xlsx' },
-  )
+  return { org: org!, user: user!, role: role!, permissions: new Set(role!.permissions) }
+}
+
+/** Adds the sample tenders only to an empty demo client, so existing work is never changed. */
+async function ensureTenders(orgId: string) {
+  const [existing] = await db.select({ n: count() }).from(tenders).where(orgWhere(tenders, orgId))
+  if ((existing?.n ?? 0) > 0) return 0
+  const result = await importTenders(await adminAuth(orgId), {
+    buffer: await sampleSheet(),
+    originalname: 'Demo-Tenders.xlsx',
+  })
   return result.created
+}
+
+/**
+ * An Agent login, to see the app as an agent does (only their assigned
+ * tenders, fewer menu items). If they have no tenders yet, the two oldest
+ * unassigned ones are assigned to them.
+ */
+async function ensureAgent(orgId: string) {
+  const [role] = await db
+    .select()
+    .from(roles)
+    .where(orgWhere(roles, orgId, eq(roles.key, 'agent')))
+  if (!role) return 0
+  const passwordHash = await hashPassword(DEMO.agentPassword)
+  let [agent] = await db
+    .select()
+    .from(users)
+    .where(orgWhere(users, orgId, eq(users.email, DEMO.agentEmail)))
+  if (agent) {
+    await db
+      .update(users)
+      .set({
+        passwordHash,
+        roleId: role.id,
+        status: 'active',
+        inviteTokenHash: null,
+        inviteExpiresAt: null,
+        totpSecret: null,
+        totpEnabledAt: null,
+      })
+      .where(orgWhere(users, orgId, eq(users.id, agent.id)))
+  } else {
+    await db.insert(users).values({
+      organizationId: orgId,
+      email: DEMO.agentEmail,
+      name: 'Demo Agent',
+      passwordHash,
+      roleId: role.id,
+      status: 'active',
+    })
+    ;[agent] = await db
+      .select()
+      .from(users)
+      .where(orgWhere(users, orgId, eq(users.email, DEMO.agentEmail)))
+  }
+  const [mine] = await db
+    .select({ n: count() })
+    .from(tenders)
+    .where(orgWhere(tenders, orgId, eq(tenders.assignedAgentId, agent!.id)))
+  if ((mine?.n ?? 0) > 0) return 0
+  const free = await db
+    .select({ id: tenders.id })
+    .from(tenders)
+    .where(orgWhere(tenders, orgId, isNull(tenders.assignedAgentId)))
+    .orderBy(asc(tenders.createdAt))
+    .limit(2)
+  const auth = await adminAuth(orgId)
+  for (const t of free) await assignTender(auth, t.id, { agentId: agent!.id })
+  return free.length
 }
 
 async function main() {
@@ -233,6 +302,7 @@ async function main() {
   const org = await ensureClient(ownerId, planId)
   await ensureCompany(org.id)
   const created = await ensureTenders(org.id)
+  const assigned = await ensureAgent(org.id)
 
   const url = env.PUBLIC_URL_TEMPLATE.replace('{slug}', DEMO.slug)
   const ownerUrl = env.PUBLIC_URL_TEMPLATE.replace('{slug}', env.OWNER_SUBDOMAIN)
@@ -240,7 +310,8 @@ async function main() {
 Demo ready${created ? ` (${created} sample tenders added)` : ''}
 
   Demo client   ${url}
-                ${DEMO.adminEmail} / ${DEMO.adminPassword}
+                ${DEMO.adminEmail} / ${DEMO.adminPassword}   (Admin)
+                ${DEMO.agentEmail} / ${DEMO.agentPassword}   (Agent${assigned ? `, ${assigned} tenders assigned` : ''})
 
   Owner panel   ${ownerUrl}
                 ${DEMO.ownerEmail} / ${DEMO.ownerPassword}
