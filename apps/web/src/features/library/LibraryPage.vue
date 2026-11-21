@@ -142,15 +142,17 @@ const act = (fn: () => Promise<void>) => fn().catch((err) => (error.value = erro
       :icon="FolderOpen"
     >
       <template #header>
-        <select
+        <UiSelect
           v-if="companies.length"
           v-model="companyFilter"
-          class="form-field h-9! w-auto! py-0! pr-9! text-sm!"
           aria-label="Filter by company"
-        >
-          <option value="">All documents</option>
-          <option v-for="c in companies" :key="c.id" :value="c.id">{{ c.name }}</option>
-        </select>
+          size="sm"
+          fit
+          :options="[
+            { value: '', label: 'All documents' },
+            ...companies.map((c) => ({ value: c.id, label: c.name })),
+          ]"
+        />
         <UiButton v-if="canManage" size="xs" @click="startUpload">
           <Upload class="size-4" aria-hidden="true" /> Upload
         </UiButton>

@@ -429,11 +429,16 @@ const cell =
                     <input v-model="a.serialNumber" :class="cell" aria-label="Serial number" />
                   </td>
                   <td class="py-1 pr-2">
-                    <select v-model="a.installStatus" :class="cell" aria-label="Installed">
-                      <option value="pending">Pending</option>
-                      <option value="installed">Yes</option>
-                      <option value="not_installed">No</option>
-                    </select>
+                    <UiSelect
+                      v-model="a.installStatus"
+                      aria-label="Installed"
+                      size="sm"
+                      :options="[
+                        { value: 'pending', label: 'Pending' },
+                        { value: 'installed', label: 'Yes' },
+                        { value: 'not_installed', label: 'No' },
+                      ]"
+                    />
                   </td>
                   <td class="py-1 pr-2">
                     <input

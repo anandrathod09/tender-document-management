@@ -12,6 +12,7 @@ import UiAlert from '@/components/ui/UiAlert.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import UiModal from '@/components/ui/UiModal.vue'
+import UiSelect from '@/components/ui/UiSelect.vue'
 import { api, errorMessage } from '@/services/api'
 import { useWorkflowStore } from '@/stores/workflow'
 import { stageDotClasses } from '@/utils/tenders'
@@ -175,6 +176,11 @@ const commentOptions: { value: CommentMode; label: string }[] = [
   { value: 'optional', label: 'Optional' },
   { value: 'required', label: 'Required' },
 ]
+const colorOptions: { value: StageColor; label: string; dot: string }[] = STAGE_COLORS.map((c) => ({
+  value: c,
+  label: COLOR_LABELS[c],
+  dot: stageDotClasses[c],
+}))
 const columns: TableColumn[] = [
   { key: 'order', label: '#', class: 'w-10' },
   { key: 'label', label: 'Stage Name', sticky: true, class: 'min-w-64' },
@@ -260,15 +266,15 @@ const indexOf = (s: StageSummary) => workflow.stages.findIndex((x) => x.id === s
           </span>
         </template>
         <template #cell-color="{ row }">
-          <select
-            :value="row.color"
-            :class="[small, 'w-28']"
+          <UiSelect
+            :model-value="row.color"
+            :options="colorOptions"
             :aria-label="`Colour of ${row.label}`"
             :disabled="saving[row.id]"
-            @change="save(row, { color: ($event.target as HTMLSelectElement).value as StageColor })"
-          >
-            <option v-for="c in STAGE_COLORS" :key="c" :value="c">{{ COLOR_LABELS[c] }}</option>
-          </select>
+            size="sm"
+            class="w-32"
+            @update:model-value="(c) => c && c !== row.color && save(row, { color: c })"
+          />
         </template>
         <template #cell-moves="{ row }">
           <button
@@ -301,21 +307,15 @@ const indexOf = (s: StageSummary) => workflow.stages.findIndex((x) => x.id === s
           </button>
         </template>
         <template #cell-commentMode="{ row }">
-          <select
-            :value="row.commentMode"
-            :class="[small, 'w-32']"
+          <UiSelect
+            :model-value="row.commentMode"
+            :options="commentOptions"
             :aria-label="`Comment setting for ${row.label}`"
             :disabled="saving[row.id]"
-            @change="
-              save(row, {
-                commentMode: ($event.target as HTMLSelectElement).value as CommentMode,
-              })
-            "
-          >
-            <option v-for="o in commentOptions" :key="o.value" :value="o.value">
-              {{ o.label }}
-            </option>
-          </select>
+            size="sm"
+            class="w-32"
+            @update:model-value="(m) => m && m !== row.commentMode && save(row, { commentMode: m })"
+          />
         </template>
         <template #cell-count="{ row }">
           <span class="text-sm tabular-nums">{{ workflow.counts[row.id] ?? 0 }}</span>

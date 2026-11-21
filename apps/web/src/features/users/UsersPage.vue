@@ -16,6 +16,7 @@ import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import UiModal from '@/components/ui/UiModal.vue'
 import UiStatCard from '@/components/ui/UiStatCard.vue'
+import UiSelect from '@/components/ui/UiSelect.vue'
 import { vTooltip } from '@/directives/tooltip'
 import { api, errorMessage } from '@/services/api'
 import { useAuthStore } from '@/stores/auth'
@@ -260,24 +261,28 @@ async function confirmToggle() {
       :subtitle="`${filtered.length} of ${users.length} users`"
     >
       <template #header>
-        <select
+        <UiSelect
           v-model="roleFilter"
-          class="form-field h-9! w-40! py-0! text-sm!"
           aria-label="Filter by role"
-        >
-          <option value="">All roles</option>
-          <option v-for="r in roles" :key="r.id" :value="r.id">{{ r.name }}</option>
-        </select>
-        <select
+          size="sm"
+          class="w-40"
+          :options="[
+            { value: '', label: 'All roles' },
+            ...roles.map((r) => ({ value: r.id, label: r.name })),
+          ]"
+        />
+        <UiSelect
           v-model="statusFilter"
-          class="form-field h-9! w-40! py-0! text-sm!"
           aria-label="Filter by status"
-        >
-          <option value="">All statuses</option>
-          <option value="active">Active</option>
-          <option value="invited">Invited</option>
-          <option value="suspended">Suspended</option>
-        </select>
+          size="sm"
+          class="w-40"
+          :options="[
+            { value: '', label: 'All statuses' },
+            { value: 'active', label: 'Active' },
+            { value: 'invited', label: 'Invited' },
+            { value: 'suspended', label: 'Suspended' },
+          ]"
+        />
         <label class="relative w-full sm:w-48">
           <span class="sr-only">Search users</span>
           <Search

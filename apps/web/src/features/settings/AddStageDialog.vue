@@ -53,7 +53,9 @@ function suggestPlace(t: StageType) {
 watch(type, suggestPlace)
 
 const typeOptions = STAGE_TYPES.map((t) => ({ value: t, label: STAGE_TYPE_LABELS[t] }))
-const afterOptions = computed(() => props.stages.map((s) => ({ value: s.id, label: s.label })))
+const afterOptions = computed(() =>
+  props.stages.map((s) => ({ value: s.id, label: s.label, dot: stageDotClasses[s.color] })),
+)
 
 async function submit() {
   errors.value = {}

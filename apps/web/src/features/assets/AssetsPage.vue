@@ -14,6 +14,7 @@ import UiAlert from '@/components/ui/UiAlert.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import UiPagination from '@/components/ui/UiPagination.vue'
+import UiSelect from '@/components/ui/UiSelect.vue'
 import { api, errorMessage } from '@/services/api'
 import { downloadFromApi } from '@/services/files'
 import { useAuthStore } from '@/stores/auth'
@@ -120,26 +121,28 @@ const daysText = (a: AssetListItem) =>
             class="form-field h-9! py-1! pl-9! text-sm!"
           />
         </label>
-        <select
+        <UiSelect
           v-model="warranty"
-          class="form-field h-9! w-auto! py-0! pr-9! text-sm!"
           aria-label="Warranty"
-        >
-          <option value="">Any warranty</option>
-          <option v-for="w in WARRANTY_STATUSES" :key="w" :value="w">
-            {{ WARRANTY_LABELS[w] }}
-          </option>
-        </select>
-        <select
+          size="sm"
+          fit
+          :options="[
+            { value: '', label: 'Any warranty' },
+            ...WARRANTY_STATUSES.map((w) => ({ value: w, label: WARRANTY_LABELS[w] })),
+          ]"
+        />
+        <UiSelect
           v-model="installStatus"
-          class="form-field h-9! w-auto! py-0! pr-9! text-sm!"
           aria-label="Installation"
-        >
-          <option value="">Installed or not</option>
-          <option value="installed">Installed</option>
-          <option value="not_installed">Not installed</option>
-          <option value="pending">Pending</option>
-        </select>
+          size="sm"
+          fit
+          :options="[
+            { value: '', label: 'Installed or not' },
+            { value: 'installed', label: 'Installed' },
+            { value: 'not_installed', label: 'Not installed' },
+            { value: 'pending', label: 'Pending' },
+          ]"
+        />
         <IconButton
           v-if="canExport"
           :icon="FileSpreadsheet"

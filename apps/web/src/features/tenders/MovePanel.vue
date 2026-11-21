@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { TenderDetail } from '@tdm/shared'
 import StageBadge from '@/components/StageBadge.vue'
@@ -11,6 +11,7 @@ import UiSelect from '@/components/ui/UiSelect.vue'
 import UiTextarea from '@/components/ui/UiTextarea.vue'
 import { api, errorMessage, fieldErrors } from '@/services/api'
 import { useWorkflowStore } from '@/stores/workflow'
+import { stageDotClasses } from '@/utils/tenders'
 import { useMoveRules } from './move-rules'
 
 const props = defineProps<{ tender: TenderDetail }>()
@@ -28,7 +29,9 @@ const saving = ref(false)
 
 // Only the next steps the client's rules allow this user, as in the original TMS.
 const options = computed(() =>
-  rules.nextFor(props.tender).map((s) => ({ value: s.id, label: s.label })),
+  rules
+    .nextFor(props.tender)
+    .map((s) => ({ value: s.id, label: s.label, dot: stageDotClasses[s.color] })),
 )
 const locked = computed(() => rules.locked(props.tender))
 const target = computed(() => (stageId.value ? workflow.byId.get(stageId.value) : undefined))
@@ -108,7 +111,7 @@ async function submit() {
       <template v-if="target?.type === 'won'">
         <UiInput
           v-model="awardAmount"
-          label="Award amount (₹)"
+          label="Award amount (â‚¹)"
           :error="errors.awardAmount"
           required
         />

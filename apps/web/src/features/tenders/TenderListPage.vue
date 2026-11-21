@@ -26,6 +26,7 @@ import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import UiPagination from '@/components/ui/UiPagination.vue'
+import UiSelect from '@/components/ui/UiSelect.vue'
 import { vTooltip } from '@/directives/tooltip'
 import { api, errorMessage } from '@/services/api'
 import { downloadFromApi } from '@/services/files'
@@ -315,17 +316,19 @@ onBeforeUnmount(() => {
             class="form-field h-9! py-1! pl-9! text-sm!"
           />
         </label>
-        <select
+        <UiSelect
           v-if="canViewAll"
-          :value="assignedTo"
-          class="form-field h-9! w-auto! py-0! pr-9! text-sm!"
+          :model-value="assignedTo"
           aria-label="Filter by assignee"
-          @change="setQuery({ assigned: ($event.target as HTMLSelectElement).value || undefined })"
-        >
-          <option value="">Anyone</option>
-          <option value="me">Assigned to me</option>
-          <option value="none">Unassigned</option>
-        </select>
+          size="sm"
+          fit
+          :options="[
+            { value: '', label: 'Anyone' },
+            { value: 'me', label: 'Assigned to me' },
+            { value: 'none', label: 'Unassigned' },
+          ]"
+          @update:model-value="(v) => setQuery({ assigned: v || undefined })"
+        />
 
         <template v-if="selected.length">
           <IconButton

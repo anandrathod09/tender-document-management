@@ -258,15 +258,13 @@ async function save() {
               class="rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-800 dark:bg-gray-900"
             >
               <div class="mb-2 flex flex-wrap items-center gap-2">
-                <select
+                <UiSelect
                   v-model="b.kind"
-                  class="form-field h-9! w-48! py-0! text-sm!"
+                  :options="kindOptions"
                   :aria-label="`Kind of block ${i + 1}`"
-                >
-                  <option v-for="k in kindOptions" :key="k.value" :value="k.value">
-                    {{ k.label }}
-                  </option>
-                </select>
+                  size="sm"
+                  class="w-48"
+                />
                 <span class="text-xs text-gray-500">{{ hint(b.kind) }}</span>
                 <div class="ml-auto flex gap-1.5">
                   <IconButton

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-vue-next'
+import UiSelect from '@/components/ui/UiSelect.vue'
 import { computed } from 'vue'
 
 /**
@@ -95,15 +96,16 @@ const btn =
       >
         <ChevronsRight class="size-4" aria-hidden="true" />
       </button>
-      <select
+      <UiSelect
         v-if="pageSizes"
-        :value="pageSize"
-        class="form-field ml-1 h-10! w-auto! py-0! pr-8!"
+        :model-value="pageSize"
+        :options="pageSizes.map((s) => ({ value: s, label: String(s) }))"
         aria-label="Rows per page"
-        @change="emit('pageSize', Number(($event.target as HTMLSelectElement).value))"
-      >
-        <option v-for="s in pageSizes" :key="s" :value="s">{{ s }}</option>
-      </select>
+        size="sm"
+        fit
+        class="ml-1"
+        @update:model-value="(s) => s !== undefined && emit('pageSize', s)"
+      />
     </nav>
   </div>
 </template>

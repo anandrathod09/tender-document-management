@@ -30,7 +30,9 @@ watch(
       document.addEventListener('keydown', onKey)
       await nextTick()
       panel.value
-        ?.querySelector<HTMLElement>('.modal-body input, .modal-body select, .modal-body textarea')
+        ?.querySelector<HTMLElement>(
+          '.modal-body input, .modal-body select, .modal-body textarea, .modal-body [role=combobox]',
+        )
         ?.focus()
     } else {
       document.removeEventListener('keydown', onKey)

@@ -12,6 +12,7 @@ import UiSelect from '@/components/ui/UiSelect.vue'
 import UiTextarea from '@/components/ui/UiTextarea.vue'
 import { api, errorMessage, fieldErrors } from '@/services/api'
 import { useWorkflowStore } from '@/stores/workflow'
+import { stageDotClasses } from '@/utils/tenders'
 import { useMoveRules } from './move-rules'
 import TenderBatchList from './TenderBatchList.vue'
 import TenderFacts from './TenderFacts.vue'
@@ -70,7 +71,7 @@ const options = computed(() =>
     .commonNext(props.tenders)
     // Won needs an award amount per tender, so it is one at a time.
     .filter((s) => !(many.value && s.type === 'won'))
-    .map((s) => ({ value: s.id, label: s.label })),
+    .map((s) => ({ value: s.id, label: s.label, dot: stageDotClasses[s.color] })),
 )
 const target = computed(() => (chosen.value ? workflow.byId.get(chosen.value) : undefined))
 const watchLabel = computed(

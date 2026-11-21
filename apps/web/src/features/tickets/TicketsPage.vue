@@ -13,6 +13,7 @@ import UiAlert from '@/components/ui/UiAlert.vue'
 import UiBadge from '@/components/ui/UiBadge.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiCard from '@/components/ui/UiCard.vue'
+import UiSelect from '@/components/ui/UiSelect.vue'
 import { api, errorMessage } from '@/services/api'
 import { formatDateTime } from '@/utils/format'
 import NewTicketModal from './NewTicketModal.vue'
@@ -86,25 +87,27 @@ watch(q, () => {
             class="form-field h-9! py-1! pl-9! text-sm!"
           />
         </label>
-        <select
+        <UiSelect
           v-model="status"
-          class="form-field h-9! w-auto! py-0! pr-9! text-sm!"
           aria-label="Status"
-        >
-          <option value="open">Open tickets</option>
-          <option value="">All tickets</option>
-          <option v-for="s in TICKET_STATUSES" :key="s" :value="s">
-            {{ TICKET_STATUS_LABELS[s] }}
-          </option>
-        </select>
-        <select
+          size="sm"
+          fit
+          :options="[
+            { value: 'open', label: 'Open tickets' },
+            { value: '', label: 'All tickets' },
+            ...TICKET_STATUSES.map((s) => ({ value: s, label: TICKET_STATUS_LABELS[s] })),
+          ]"
+        />
+        <UiSelect
           v-model="priority"
-          class="form-field h-9! w-auto! py-0! pr-9! text-sm!"
           aria-label="Priority"
-        >
-          <option value="">Any priority</option>
-          <option v-for="p in TICKET_PRIORITIES" :key="p" :value="p">{{ cap(p) }}</option>
-        </select>
+          size="sm"
+          fit
+          :options="[
+            { value: '', label: 'Any priority' },
+            ...TICKET_PRIORITIES.map((p) => ({ value: p, label: cap(p) })),
+          ]"
+        />
         <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
           <input
             v-model="mine"
