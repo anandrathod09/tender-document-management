@@ -1,0 +1,30 @@
+# Runs the API (and its background job worker) and restarts it if it stops.
+# Install: sudo cp deploy/systemd/tender-manager-api.service /etc/systemd/system/
+#          sudo systemctl daemon-reload && sudo systemctl enable --now tender-manager-api
+# Logs:    journalctl -u tender-manager-api -f
+
+[Unit]
+Description=Tender Manager API
+After=network.target mysql.service
+Wants=mysql.service
+
+[Service]
+Type=simple
+User=tdm
+Group=tdm
+WorkingDirectory=/opt/tender-manager/apps/api
+ExecStart=/usr/bin/node dist/server.js
+Restart=always
+RestartSec=5
+# Settings come from apps/api/.env (read by the API itself).
+Environment=NODE_ENV=production
+
+# Hardening: the API only needs its own folders.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/tender-manager
+
+[Install]
+WantedBy=multi-user.target

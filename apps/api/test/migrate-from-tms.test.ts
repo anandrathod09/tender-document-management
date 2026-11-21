@@ -163,6 +163,9 @@ describe('migration from the original TMS', () => {
       deadline: '2026-03-10',
     })
     expect(byRef['PWD/2']!.stage.label).toBe('Not bidded')
+    // The missed deadline is remembered, so an admin can reopen it without the deadline job undoing that.
+    expect(byRef['PWD/2']!.reopenedAfterDeadline).toBe(true)
+    expect(byRef['GEM/2026/B/1']!.reopenedAfterDeadline).toBe(false)
     expect(byRef['PWD/3']!.stage.label).toBe('Rejected')
 
     const won = (
@@ -227,8 +230,8 @@ describe('migration from the original TMS', () => {
     expect((row as unknown as { key: string }[])[0]!.key).toBe('price-review')
   })
 
-  it('refuses to migrate twice into the same workspace', async () => {
+  it('refuses to move the same old database twice', async () => {
     await run()
-    await expect(run()).rejects.toThrow(/already has tenders/)
+    await expect(run()).rejects.toThrow(/already moved into workspace/)
   })
 })

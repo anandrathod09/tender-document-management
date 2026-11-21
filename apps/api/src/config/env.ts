@@ -47,8 +47,20 @@ const schema = z.object({
   MAIL_FROM_ADDRESS: z.email(),
   PRODUCT_NAME: z.string().min(1).default('Tender Manager'),
 
-  // Where uploaded files are kept (local disk driver). Relative to apps/api.
+  // Where uploaded files are kept: "local" (a folder on this server) or "s3"
+  // (Amazon S3, Cloudflare R2, DigitalOcean Spaces, Backblaze B2, MinIO...).
+  STORAGE_DRIVER: z.enum(['local', 's3']).default('local'),
+  // Local driver: the folder, relative to apps/api.
   STORAGE_DIR: z.string().min(1).default('storage'),
+  // S3 driver. S3_ENDPOINT is empty for Amazon S3, or the provider's URL, e.g.
+  // https://<account>.r2.cloudflarestorage.com or https://blr1.digitaloceanspaces.com
+  S3_ENDPOINT: z.string().optional(),
+  S3_REGION: z.string().default('auto'),
+  S3_BUCKET: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  // true for MinIO and some providers that need bucket-in-path URLs.
+  S3_FORCE_PATH_STYLE: bool,
   // Run the background job worker inside this process. Set false when a
   // separate worker process is used.
   RUN_WORKER: z
@@ -89,6 +101,41 @@ if (!parsed.success) {
   for (const issue of parsed.error.issues) {
     console.error(`  ${issue.path.join('.')}: ${issue.message}`)
   }
+  process.exit(1)
+}
+
+/**
+ * Settings that are fine on a laptop but unsafe on a live server. In
+ * production the API refuses to start until they are fixed.
+ */
+export function productionProblems(e: z.infer<typeof schema>): string[] {
+  if (e.NODE_ENV !== 'production') return []
+  const problems: string[] = []
+  const local = e.BASE_DOMAIN === 'localhost' || e.BASE_DOMAIN.endsWith('.localhost')
+  if (local) problems.push('BASE_DOMAIN: set your real domain, e.g. yourproduct.com')
+  if (!e.PUBLIC_URL_TEMPLATE.startsWith('https://'))
+    problems.push(
+      'PUBLIC_URL_TEMPLATE: must start with https://, e.g. https://{slug}.yourproduct.com',
+    )
+  if (!e.COOKIE_SECURE)
+    problems.push('COOKIE_SECURE: must be true (sign-in cookies over HTTPS only)')
+  if (!e.ENCRYPTION_KEY)
+    problems.push('ENCRYPTION_KEY: set its own random value (openssl rand -hex 32)')
+  if (e.JWT_ACCESS_SECRET.length < 48)
+    problems.push('JWT_ACCESS_SECRET: use at least 48 random characters (openssl rand -hex 32)')
+  if (e.ENCRYPTION_KEY && e.ENCRYPTION_KEY === e.JWT_ACCESS_SECRET)
+    problems.push('ENCRYPTION_KEY: must differ from JWT_ACCESS_SECRET')
+  if (e.STORAGE_DRIVER === 's3' && !(e.S3_BUCKET && e.S3_ACCESS_KEY_ID && e.S3_SECRET_ACCESS_KEY))
+    problems.push(
+      'S3_BUCKET, S3_ACCESS_KEY_ID and S3_SECRET_ACCESS_KEY: needed with STORAGE_DRIVER=s3',
+    )
+  return problems
+}
+
+const problems = productionProblems(parsed.data)
+if (problems.length) {
+  console.error('Unsafe settings for production (NODE_ENV=production):')
+  for (const p of problems) console.error(`  ${p}`)
   process.exit(1)
 }
 

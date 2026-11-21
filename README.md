@@ -336,9 +336,19 @@ What it carries over: users (with their existing passwords; "client" buyer login
 
 Suggested order on the day: put the old TMS in read-only mode, back up both databases, run the dry run, check the summary with the client, run the real migration, then let the client check their data on the new subdomain. Keep the old TMS read-only for 30 days as a fallback.
 
-## Production notes
+## Going live
 
-- nginx must pass the original `Host` header to the API (`proxy_set_header Host $host;`) because the API uses it to find the client.
-- Set `COOKIE_SECURE=true`, a long random `JWT_ACCESS_SECRET`, and `PUBLIC_URL_TEMPLATE=https://{slug}.<your-domain>`.
-- DNS needs a wildcard record `*.<your-domain>` and a wildcard TLS certificate.
-- Run `node dist/db/migrate.js` from `apps/api` before restarting the API.
+The step-by-step server guide is [deploy/README.md](deploy/README.md): DNS, server set-up, database, wildcard HTTPS certificate, nginx, the API service, daily backups with a restore test, moving an old-TMS client, and updating. The files it uses:
+
+| File                                        | What it is                                                                    |
+| ------------------------------------------- | ----------------------------------------------------------------------------- |
+| `apps/api/.env.production.example`          | Settings for the server                                                       |
+| `deploy/nginx/tender-manager.conf`          | nginx site for every client subdomain (static web app + `/api`)               |
+| `deploy/systemd/tender-manager-api.service` | Keeps the API running                                                         |
+| `deploy/scripts/deploy.sh`                  | Update: backup, pull, build, migrate, restart, health check                   |
+| `deploy/scripts/backup.sh`                  | Daily database and file backup, 14 days kept, optional off-site copy          |
+| `deploy/scripts/restore.sh`                 | Restores a backup into a separate database to check it, or over the live data |
+
+**Safety checks.** With `NODE_ENV=production` the API refuses to start on unsafe settings (a localhost domain, `http://` links, insecure cookies, a missing or short secret) and lists each one.
+
+**File storage.** `STORAGE_DRIVER=local` keeps files in a folder on the server. `STORAGE_DRIVER=s3` keeps them in a private S3-compatible bucket (Cloudflare R2, DigitalOcean Spaces, Amazon S3, Backblaze B2). `npm run storage:to-s3` copies existing files across when switching.

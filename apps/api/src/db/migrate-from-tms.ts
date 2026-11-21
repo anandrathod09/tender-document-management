@@ -15,7 +15,7 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { basename, isAbsolute, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
-import { count, eq } from 'drizzle-orm'
+import { count, eq, inArray } from 'drizzle-orm'
 import mysql, { type RowDataPacket } from 'mysql2/promise'
 import { DEFAULT_ROLES, type EngineerStatus, type InstallStatus } from '@tdm/shared'
 import { env } from '../config/env'
@@ -234,6 +234,24 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
 
   try {
     await db.transaction(async (tx) => {
+      // ---- Already moved? -----------------------------------------------------
+      // Old records keep their ids, so the same old database can only be moved once.
+      const oldTenderIds = oldTenders.map((t) => String(t.id)).filter((id) => UUID.test(id))
+      if (oldTenderIds.length) {
+        const [hit] = await tx
+          .select({ slug: organizations.slug })
+          .from(tenders)
+          .innerJoin(organizations, eq(organizations.id, tenders.organizationId))
+          .where(inArray(tenders.id, oldTenderIds.slice(0, 500)))
+          .limit(1)
+        if (hit) {
+          throw new Error(
+            `This old database was already moved into workspace "${hit.slug}". ` +
+              'Each old TMS can be moved once; rehearse on a fresh copy of the database instead.',
+          )
+        }
+      }
+
       // ---- Organization, roles, stages --------------------------------------
       let [org] = await tx
         .select()
@@ -483,6 +501,12 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
           stageId: current.id,
           previousStageId: previous,
           stageChangedAt: updatedAt,
+          // The old expiredAt: set when the deadline was missed, kept after an admin reopened it.
+          deadlineMissedAt: t.expiredAt
+            ? timeOf(t.expiredAt, updatedAt)
+            : stageKey === 'not-bidded'
+              ? updatedAt
+              : null,
           assignedAgentId: agentId,
           assignedAt: agentId ? timeOf(t.agentAssignedAt, updatedAt) : null,
           biddingCompanyId: companyId,

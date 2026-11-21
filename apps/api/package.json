@@ -15,9 +15,11 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:seed": "tsx src/db/seed.ts",
     "db:demo": "tsx src/db/demo.ts",
-    "migrate:tms": "tsx src/db/migrate-from-tms.ts"
+    "migrate:tms": "tsx src/db/migrate-from-tms.ts",
+    "storage:to-s3": "tsx src/db/copy-files-to-s3.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1175.0",
     "@tdm/shared": "0.1.0",
     "bcryptjs": "^3.0.3",
     "cookie-parser": "^1.4.7",
