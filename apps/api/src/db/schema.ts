@@ -323,6 +323,8 @@ export const workflowStages = mysqlTable(
     agentNext: json('agent_next').$type<string[] | null>(),
     /** Extra stage keys an admin may move to; null = any stage. */
     managerNext: json('manager_next').$type<string[] | null>(),
+    /** Role keys that see the stage in their sidebar menu; null = everyone. */
+    menuRoles: json('menu_roles').$type<string[] | null>(),
     sortOrder: int('sort_order').notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),

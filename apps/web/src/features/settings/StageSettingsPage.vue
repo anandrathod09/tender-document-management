@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ArrowDown, ArrowUp, Plus, RotateCcw, Workflow } from 'lucide-vue-next'
 import { onMounted, reactive, ref } from 'vue'
-import type { CommentMode, StageSummary } from '@tdm/shared'
+import type { CommentMode, RoleSummary, StageSummary } from '@tdm/shared'
 import { STAGE_COLORS, STAGE_TYPE_LABELS, type StageColor } from '@tdm/shared/workflow'
 import { ACTION_ICONS } from '@/components/ui/actions'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -16,7 +16,9 @@ import { api, errorMessage } from '@/services/api'
 import { useWorkflowStore } from '@/stores/workflow'
 import { stageDotClasses } from '@/utils/tenders'
 import AddStageDialog from './AddStageDialog.vue'
+import MenuRolesDialog from './MenuRolesDialog.vue'
 import MoveRulesDialog from './MoveRulesDialog.vue'
+import ResetWorkflowDialog from './ResetWorkflowDialog.vue'
 import { COLOR_LABELS } from './stage-ui'
 
 /**
@@ -36,6 +38,32 @@ const deleting = ref<StageSummary | null>(null)
 const deletingBusy = ref(false)
 const moving = ref(false)
 const editingMoves = ref<StageSummary | null>(null)
+const editingMenu = ref<StageSummary | null>(null)
+const resetting = ref(false)
+const roles = ref<RoleSummary[]>([])
+
+function onMenuSaved(stage: StageSummary) {
+  workflow.replaceStage(stage)
+  editingMenu.value = null
+  notice.value = `Saved who sees “${stage.label}” in the menu.`
+}
+
+function onReset(stages: StageSummary[]) {
+  workflow.stages = stages
+  syncDrafts()
+  resetting.value = false
+  notice.value = 'The chosen settings are back to default.'
+}
+
+/** "Admin, Agent, Viewer" for role keys; null = everyone. */
+function rolesOf(keys: string[] | null): string {
+  if (keys === null) return 'Everyone'
+  if (!keys.length) return 'Nobody'
+  return roles.value
+    .filter((r) => keys.includes(r.key))
+    .map((r) => r.name)
+    .join(', ')
+}
 
 function onMovesSaved(stage: StageSummary) {
   workflow.replaceStage(stage)
@@ -57,6 +85,7 @@ onMounted(async () => {
     await workflow.reloadStages()
     await workflow.refreshCounts()
     syncDrafts()
+    roles.value = (await api.get<RoleSummary[]>('/roles')).data
   } catch (err) {
     loadError.value = errorMessage(err)
   }
@@ -152,7 +181,8 @@ const columns: TableColumn[] = [
   { key: 'type', label: 'Kind' },
   { key: 'color', label: 'Colour' },
   { key: 'moves', label: 'Can Move To' },
-  { key: 'commentMode', label: 'Comment When Moving Here' },
+  { key: 'menu', label: 'In Menu For' },
+  { key: 'commentMode', label: 'Comment' },
   { key: 'count', label: 'Tenders', align: 'right' },
   { key: 'isVisible', label: 'Shown' },
 ]
@@ -173,6 +203,9 @@ const indexOf = (s: StageSummary) => workflow.stages.findIndex((x) => x.id === s
       :icon="Workflow"
     >
       <template #header>
+        <UiButton size="xs" variant="secondary" @click="resetting = true">
+          <RotateCcw class="size-4" aria-hidden="true" /> Reset to Default
+        </UiButton>
         <UiButton size="xs" @click="adding = true">
           <Plus class="size-4" aria-hidden="true" /> Add Stage
         </UiButton>
@@ -229,7 +262,7 @@ const indexOf = (s: StageSummary) => workflow.stages.findIndex((x) => x.id === s
         <template #cell-color="{ row }">
           <select
             :value="row.color"
-            :class="[small, 'w-32']"
+            :class="[small, 'w-28']"
             :aria-label="`Colour of ${row.label}`"
             :disabled="saving[row.id]"
             @change="save(row, { color: ($event.target as HTMLSelectElement).value as StageColor })"
@@ -257,10 +290,20 @@ const indexOf = (s: StageSummary) => workflow.stages.findIndex((x) => x.id === s
             </span>
           </button>
         </template>
+        <template #cell-menu="{ row }">
+          <button
+            type="button"
+            class="block max-w-44 text-left text-xs leading-5 text-gray-700 hover:text-blue-600 dark:text-gray-300 dark:hover:text-blue-400"
+            :aria-label="`Edit who sees ${row.label} in the menu`"
+            @click="editingMenu = row"
+          >
+            {{ rolesOf(row.menuRoles) }}
+          </button>
+        </template>
         <template #cell-commentMode="{ row }">
           <select
             :value="row.commentMode"
-            :class="[small, 'w-36']"
+            :class="[small, 'w-32']"
             :aria-label="`Comment setting for ${row.label}`"
             :disabled="saving[row.id]"
             @change="
@@ -332,8 +375,19 @@ const indexOf = (s: StageSummary) => workflow.stages.findIndex((x) => x.id === s
       deleted; your own stages can be deleted until a tender has used them. Reports and deadline
       rules use each stage's kind, so renaming or reordering never breaks them. “Can move to” lists
       the next steps the Agent working on a tender may choose, and the extra ones only admins may
-      choose; click it to change them.
+      choose; “In menu for” is who sees the stage in their sidebar. Click either to change it, or
+      use Reset to Default to put things back.
     </p>
+
+    <MenuRolesDialog
+      :open="!!editingMenu"
+      :stage="editingMenu"
+      :roles="roles"
+      @close="editingMenu = null"
+      @saved="onMenuSaved"
+    />
+
+    <ResetWorkflowDialog :open="resetting" @close="resetting = false" @done="onReset" />
 
     <MoveRulesDialog
       :open="!!editingMoves"

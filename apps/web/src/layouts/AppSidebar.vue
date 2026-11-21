@@ -24,7 +24,12 @@ const wide = computed(() => isExpanded.value || isHovered.value || isMobileOpen.
 
 const groups = computed(() => {
   const menu = isTenant.value
-    ? tenantMenu(workflow.visibleStages, workflow.counts, workflow.total)
+    ? tenantMenu(
+        workflow.visibleStages,
+        workflow.counts,
+        workflow.total,
+        auth.tenant?.role.key ?? '',
+      )
     : ownerMenu
   return menu
     .map((g) => ({ ...g, items: g.items.filter((i) => !i.permission || auth.can(i.permission)) }))

@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto'
 import { and, asc, count, eq, ne, or } from 'drizzle-orm'
 import {
   DEFAULT_STAGES,
+  stageDefaults,
   type CreateStageInput,
+  type ResetWorkflowInput,
   type StageSummary,
   type StageSystemRole,
   type StageType,
@@ -11,6 +13,7 @@ import {
 import { db, type DbOrTx } from '../../db/client'
 import { orgWhere } from '../../db/scope'
 import {
+  roles,
   tenders,
   tenderStageHistory,
   workflowStages,
@@ -36,6 +39,7 @@ export async function createDefaultStages(conn: DbOrTx, organizationId: string) 
       systemRole: s.systemRole ?? null,
       agentNext: s.agentNext,
       managerNext: s.managerNext,
+      menuRoles: s.menuRoles,
       sortOrder: (i + 1) * 10,
     })),
   )
@@ -56,6 +60,7 @@ export function toStageSummary(s: WorkflowStage): StageSummary {
     isCustom: s.key.startsWith(CUSTOM_PREFIX),
     agentNext: s.agentNext ?? null,
     managerNext: s.managerNext ?? null,
+    menuRoles: s.menuRoles ?? null,
   }
 }
 
@@ -191,10 +196,24 @@ export async function updateStage(
       }
     }
 
+    // The sidebar menu may only name roles of this workspace.
+    if (input.menuRoles) {
+      const known = new Set(
+        (await tx.select({ key: roles.key }).from(roles).where(orgWhere(roles, org.id))).map(
+          (r) => r.key,
+        ),
+      )
+      if (input.menuRoles.some((k) => !known.has(k)))
+        throw badRequest('ROLE_NOT_FOUND', 'One of the chosen roles does not exist')
+    }
+
     await tx
       .update(workflowStages)
       .set({
         ...(label !== undefined && { label }),
+        ...(input.menuRoles !== undefined && {
+          menuRoles: input.menuRoles ? [...new Set(input.menuRoles)] : null,
+        }),
         ...(input.agentNext !== undefined && {
           agentNext: input.agentNext ? [...new Set(input.agentNext)] : null,
         }),
@@ -271,6 +290,8 @@ export async function createStage(
       // A new stage: admins can move tenders on from it to any stage until they set its rules.
       agentNext: [],
       managerNext: null,
+      // Everyone sees a new stage in the menu until the admin narrows it.
+      menuRoles: null,
       sortOrder: 0,
     })
     const order = all.map((s) => s.id)
@@ -372,5 +393,91 @@ export async function deleteStage(org: Organization, actor: Actor, stageId: stri
       details: { label: stage.label },
       ip: actor.ip,
     })
+  })
+}
+
+/**
+ * Puts parts of the workflow back to the starting settings, for every stage
+ * or for one. The client's own stages are kept (never deleted); "order" puts
+ * them after the last default stage of the same kind.
+ *  - look: names and colours
+ *  - order: the default order
+ *  - settings: comment rules, and default stages shown again
+ *  - moves: "can move to" rules
+ *  - menus: who sees each stage in the sidebar
+ */
+export async function resetWorkflow(
+  org: Organization,
+  actor: Actor,
+  input: ResetWorkflowInput,
+): Promise<StageSummary[]> {
+  const parts = new Set(input.parts)
+  return db.transaction(async (tx) => {
+    const all = await listStages(tx, org.id)
+    const targets = input.stageId ? all.filter((s) => s.id === input.stageId) : all
+    if (input.stageId && !targets.length) throw notFound('STAGE_NOT_FOUND', 'Stage not found')
+
+    if (parts.has('look')) {
+      const names = new Map(all.map((s) => [s.id, s.label.toLowerCase()]))
+      for (const s of targets) names.set(s.id, stageDefaults(s).label.toLowerCase())
+      const seen = new Map<string, string>()
+      for (const [id, name] of names) {
+        const other = seen.get(name)
+        if (other) {
+          const clash = all.find((s) => s.id === other || s.id === id)!
+          throw conflict(
+            'STAGE_LABEL_TAKEN',
+            `Two stages would both be called "${stageDefaults(clash).label}". Rename your own stage first.`,
+          )
+        }
+        seen.set(name, id)
+      }
+    }
+
+    for (const s of targets) {
+      const d = stageDefaults(s)
+      const isDefault = DEFAULT_STAGES.some((x) => x.key === s.key)
+      await tx
+        .update(workflowStages)
+        .set({
+          ...(parts.has('look') && { label: d.label, color: d.color }),
+          ...(parts.has('settings') && {
+            commentMode: d.commentMode,
+            ...(isDefault && { isVisible: true }),
+          }),
+          ...(parts.has('moves') && { agentNext: d.agentNext, managerNext: d.managerNext }),
+          ...(parts.has('menus') && { menuRoles: d.menuRoles }),
+        })
+        .where(orgWhere(workflowStages, org.id, eq(workflowStages.id, s.id)))
+    }
+
+    if (parts.has('order') && !input.stageId) {
+      const order = DEFAULT_STAGES.map((d) => all.find((s) => s.key === d.key)).filter(
+        (s): s is WorkflowStage => !!s,
+      )
+      const own = all.filter((s) => !DEFAULT_STAGES.some((d) => d.key === s.key))
+      for (const s of own) {
+        // After the last stage of the same kind, else at the end.
+        const at = order.map((o) => o.type).lastIndexOf(s.type)
+        order.splice(at === -1 ? order.length : at + 1, 0, s)
+      }
+      await renumber(
+        tx,
+        org.id,
+        order.map((s) => s.id),
+      )
+    }
+
+    await writeAudit(tx, {
+      organizationId: org.id,
+      actorType: actor.type,
+      actorId: actor.id,
+      action: 'workflow.reset',
+      entity: input.stageId ? 'workflow_stage' : 'organization',
+      entityId: input.stageId ?? org.id,
+      details: { parts: input.parts },
+      ip: actor.ip,
+    })
+    return (await listStages(tx, org.id)).map(toStageSummary)
   })
 }

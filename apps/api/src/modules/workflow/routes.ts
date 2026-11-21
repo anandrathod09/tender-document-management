@@ -1,5 +1,11 @@
 import { Router, type Request } from 'express'
-import { createStageSchema, PERMISSIONS, reorderStagesSchema, updateStageSchema } from '@tdm/shared'
+import {
+  createStageSchema,
+  PERMISSIONS,
+  reorderStagesSchema,
+  resetWorkflowSchema,
+  updateStageSchema,
+} from '@tdm/shared'
 import { db } from '../../db/client'
 import { parse } from '../../lib/validate'
 import { authenticateTenant, requirePermission, tenantAuth } from '../../middleware/auth'
@@ -8,6 +14,7 @@ import {
   deleteStage,
   listStages,
   reorderStages,
+  resetWorkflow,
   toStageSummary,
   updateStage,
 } from './service'
@@ -54,6 +61,16 @@ workflowRouter.put(
   async (req, res) => {
     const { ids } = parse(reorderStagesSchema, req.body)
     res.json(await reorderStages(tenantAuth(req).org, actorOf(req), ids))
+  },
+)
+
+// Back to the starting settings (names, order, settings, moves, menus), for all stages or one.
+workflowRouter.post(
+  '/stages/reset',
+  requirePermission(PERMISSIONS.WORKFLOW_MANAGE),
+  async (req, res) => {
+    const input = parse(resetWorkflowSchema, req.body)
+    res.json(await resetWorkflow(tenantAuth(req).org, actorOf(req), input))
   },
 )
 

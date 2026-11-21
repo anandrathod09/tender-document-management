@@ -1,6 +1,8 @@
 <script setup lang="ts">
+import { RotateCcw } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 import type { StageSummary } from '@tdm/shared'
+import { stageDefaults } from '@tdm/shared/workflow'
 import ModalNote from '@/components/ui/ModalNote.vue'
 import UiAlert from '@/components/ui/UiAlert.vue'
 import UiButton from '@/components/ui/UiButton.vue'
@@ -39,6 +41,13 @@ watch(
 )
 
 const others = computed(() => props.stages.filter((s) => s.id !== props.stage?.id))
+
+function useDefaults() {
+  if (!props.stage) return
+  const d = stageDefaults(props.stage)
+  agent.value = toSide(d.agentNext)
+  admin.value = toSide(d.managerNext)
+}
 
 function toggle(side: Side, key: string) {
   side.keys = side.keys.includes(key) ? side.keys.filter((k) => k !== key) : [...side.keys, key]
@@ -129,6 +138,9 @@ const sides = computed(() => [
       </ModalNote>
     </div>
     <template #footer>
+      <UiButton variant="ghost" class="mr-auto" :disabled="saving" @click="useDefaults">
+        <RotateCcw class="size-4" aria-hidden="true" /> Use Default
+      </UiButton>
       <UiButton variant="secondary" :disabled="saving" @click="emit('close')">Cancel</UiButton>
       <UiButton :loading="saving" @click="save">Save Moves</UiButton>
     </template>

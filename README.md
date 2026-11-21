@@ -215,6 +215,32 @@ Other rules:
 - **Your own stages** start with no agent moves and "any stage" for admins. Add them to the lists of the stages around them.
 - Bulk moves only offer stages allowed for every selected tender. The API checks the same rules, so they can't be skipped.
 
+### Sidebar menu
+
+Stages are grouped in the sidebar under headings, chosen automatically from each stage's kind, so a client's own stages land in the right place:
+
+| Heading       | Stage kinds                                         |
+| ------------- | --------------------------------------------------- |
+| Tenders       | Open (New, Watchlist)                               |
+| Bidding       | Preparing, Review, Submitted                        |
+| Results       | Won, Lost, Dropped (Not fit, Not bidded, Rejected)  |
+| After the win | Execution, Closed (Assigned to engineer, Completed) |
+
+**In Menu For** on Workflow stages chooses which roles see each stage in their menu. The defaults copy the original TMS menus:
+
+- **Agent:** Assigned, In progress, Price review, Criteria review, Ready to bid, Submitted, Under query, Won, Lost, Completed, Not fit, Not bidded.
+- **Engineer:** Assigned to engineer, Completed.
+- **Admin and Viewer:** every stage.
+- **Your own new stages:** everyone, until the admin narrows them.
+
+This only tidies the menu. "All tenders" still lists every tender a person may see, and every stage stays in the status lists.
+
+### Reset to default
+
+**Reset to Default** on Workflow stages puts back any of: sidebar menus, "can move to" rules, names and colours, order, and comment rules with hidden stages. Tenders stay where they are and the client's own stages are kept; with "order", each own stage goes after the last default stage of its kind. The "Can move to" and "In menu for" popups also have **Use Default** for a single stage.
+
+API: `POST /api/workflow/stages/reset` with `{ "parts": [...], "stageId"?: "…" }`.
+
 API: `GET/POST /api/workflow/stages`, `PATCH/DELETE /api/workflow/stages/:id`, `PUT /api/workflow/stages/order`.
 
 ## Two-step login

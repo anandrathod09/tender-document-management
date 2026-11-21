@@ -1,5 +1,11 @@
 import { z } from 'zod'
-import { COMMENT_MODES, STAGE_COLORS, STAGE_LABEL_MAX, STAGE_TYPES } from './workflow'
+import {
+  COMMENT_MODES,
+  STAGE_COLORS,
+  STAGE_LABEL_MAX,
+  STAGE_TYPES,
+  WORKFLOW_RESET_PARTS,
+} from './workflow'
 import { ORGANIZATION_STATUSES, RESERVED_SUBDOMAINS, SLUG_PATTERN } from './workspace'
 
 const email = z
@@ -118,6 +124,8 @@ export const updateStageSchema = z
     /** Stage keys; null = any stage. */
     agentNext: z.array(z.string().max(50)).max(60).nullable(),
     managerNext: z.array(z.string().max(50)).max(60).nullable(),
+    /** Role keys; null = everyone. */
+    menuRoles: z.array(z.string().max(50)).max(20).nullable(),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update')
@@ -133,6 +141,13 @@ export const createStageSchema = z.object({
   afterStageId: z.uuid().optional(),
 })
 export type CreateStageInput = z.input<typeof createStageSchema>
+
+/** Puts parts of the workflow back to the starting settings, for every stage or one. */
+export const resetWorkflowSchema = z.object({
+  parts: z.array(z.enum(WORKFLOW_RESET_PARTS)).min(1, 'Choose what to reset'),
+  stageId: z.uuid().optional(),
+})
+export type ResetWorkflowInput = z.infer<typeof resetWorkflowSchema>
 
 export const reorderStagesSchema = z.object({
   /** Every stage id of the workspace, in the new order. */

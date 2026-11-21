@@ -68,6 +68,8 @@ export interface StageMoveRules {
 }
 
 export interface DefaultStage extends StageMoveRules {
+  /** Role keys that see the stage in their sidebar menu; null = everyone. */
+  menuRoles: string[] | null
   key: string
   label: string
   type: StageType
@@ -87,6 +89,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     systemRole: 'intake',
     agentNext: [],
     managerNext: ['watchlist', 'rejected'],
+    menuRoles: ['admin', 'viewer'],
   },
   {
     key: 'watchlist',
@@ -96,6 +99,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'optional',
     agentNext: [],
     managerNext: ['new', 'rejected'],
+    menuRoles: ['admin', 'viewer'],
   },
   {
     key: 'assigned',
@@ -105,6 +109,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'optional',
     agentNext: ['in-progress'],
     managerNext: [],
+    menuRoles: ['admin', 'agent', 'viewer'],
   },
   {
     key: 'in-progress',
@@ -114,6 +119,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'optional',
     agentNext: ['price-review', 'criteria-review'],
     managerNext: [],
+    menuRoles: ['admin', 'agent', 'viewer'],
   },
   {
     key: 'price-review',
@@ -123,6 +129,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'optional',
     agentNext: [],
     managerNext: ['ready-to-bid', 'not-fit'],
+    menuRoles: ['admin', 'agent', 'viewer'],
   },
   {
     key: 'criteria-review',
@@ -132,6 +139,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'optional',
     agentNext: [],
     managerNext: ['ready-to-bid', 'not-fit'],
+    menuRoles: ['admin', 'agent', 'viewer'],
   },
   {
     key: 'ready-to-bid',
@@ -141,6 +149,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'optional',
     agentNext: ['submitted'],
     managerNext: [],
+    menuRoles: ['admin', 'agent', 'viewer'],
   },
   {
     key: 'submitted',
@@ -150,6 +159,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'optional',
     agentNext: ['under-query', 'won', 'lost'],
     managerNext: [],
+    menuRoles: ['admin', 'agent', 'viewer'],
   },
   {
     key: 'under-query',
@@ -159,6 +169,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'optional',
     agentNext: ['won', 'lost'],
     managerNext: [],
+    menuRoles: ['admin', 'agent', 'viewer'],
   },
   {
     key: 'won',
@@ -168,6 +179,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'optional',
     agentNext: [],
     managerNext: ['assigned-to-engineer'],
+    menuRoles: ['admin', 'agent', 'viewer'],
   },
   {
     key: 'lost',
@@ -177,6 +189,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'required',
     agentNext: [],
     managerNext: [],
+    menuRoles: ['admin', 'agent', 'viewer'],
   },
   {
     key: 'assigned-to-engineer',
@@ -186,6 +199,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'optional',
     agentNext: [],
     managerNext: ['completed'],
+    menuRoles: ['admin', 'engineer', 'viewer'],
   },
   {
     key: 'completed',
@@ -195,6 +209,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'optional',
     agentNext: [],
     managerNext: [],
+    menuRoles: ['admin', 'agent', 'engineer', 'viewer'],
   },
   {
     key: 'not-fit',
@@ -204,6 +219,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'required',
     agentNext: [],
     managerNext: [],
+    menuRoles: ['admin', 'agent', 'viewer'],
   },
   {
     key: 'not-bidded',
@@ -214,6 +230,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     systemRole: 'missed_deadline',
     agentNext: [],
     managerNext: null,
+    menuRoles: ['admin', 'agent', 'viewer'],
   },
   {
     key: 'rejected',
@@ -223,6 +240,7 @@ export const DEFAULT_STAGES: DefaultStage[] = [
     commentMode: 'required',
     agentNext: [],
     managerNext: [],
+    menuRoles: ['admin', 'viewer'],
   },
 ]
 
@@ -268,4 +286,63 @@ export function allowedNextStages<S extends MovableStage>(
   if (lists.some((l) => l === null)) return others
   const keys = new Set(lists.flatMap((l) => l ?? []))
   return others.filter((s) => keys.has(s.key))
+}
+
+/**
+ * Sidebar headings. Stages are grouped by their kind automatically, so a
+ * client's own stages land under the right heading without any setting.
+ */
+export const SIDEBAR_GROUPS: { title: string; types: readonly StageType[] }[] = [
+  { title: 'Tenders', types: ['open'] },
+  { title: 'Bidding', types: ['preparing', 'review', 'submitted'] },
+  { title: 'Results', types: ['won', 'lost', 'dropped'] },
+  { title: 'After the win', types: ['execution', 'closed'] },
+]
+
+/** Whether a stage is in the sidebar menu of someone with this role. */
+export function inMenuFor(stage: { menuRoles: string[] | null }, roleKey: string): boolean {
+  return stage.menuRoles === null || stage.menuRoles.includes(roleKey)
+}
+
+/** The parts of the workflow an admin can put back to how they were at the start. */
+export const WORKFLOW_RESET_PARTS = ['look', 'order', 'settings', 'moves', 'menus'] as const
+export type WorkflowResetPart = (typeof WORKFLOW_RESET_PARTS)[number]
+
+/**
+ * A stage's starting settings: from DEFAULT_STAGES for the default stages; for
+ * a client's own stage, how it was created (its own name, everyone sees it,
+ * no agent moves, admins may move it anywhere).
+ */
+export function stageDefaults(stage: {
+  key: string
+  defaultLabel: string
+  color: StageColor
+  commentMode: CommentMode
+}): {
+  label: string
+  color: StageColor
+  commentMode: CommentMode
+  agentNext: string[] | null
+  managerNext: string[] | null
+  menuRoles: string[] | null
+} {
+  const d = DEFAULT_STAGES.find((x) => x.key === stage.key)
+  if (d) {
+    return {
+      label: d.label,
+      color: d.color,
+      commentMode: d.commentMode,
+      agentNext: d.agentNext,
+      managerNext: d.managerNext,
+      menuRoles: d.menuRoles,
+    }
+  }
+  return {
+    label: stage.defaultLabel,
+    color: stage.color,
+    commentMode: stage.commentMode,
+    agentNext: [],
+    managerNext: null,
+    menuRoles: null,
+  }
 }

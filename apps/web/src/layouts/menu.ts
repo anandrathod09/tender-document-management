@@ -15,7 +15,7 @@ import {
 } from 'lucide-vue-next'
 import type { Component } from 'vue'
 import { PERMISSIONS, type Permission } from '@tdm/shared/permissions'
-import type { StageColor } from '@tdm/shared/workflow'
+import { inMenuFor, SIDEBAR_GROUPS, type StageColor, type StageType } from '@tdm/shared/workflow'
 
 export interface MenuItem {
   label: string
@@ -34,24 +34,44 @@ export interface MenuGroup {
   items: MenuItem[]
 }
 
-/** Client workspace menu. The tender stages come from the client's own workflow. */
+interface MenuStage {
+  id: string
+  label: string
+  color: StageColor
+  type: StageType
+  menuRoles: string[] | null
+}
+
+/**
+ * Client workspace menu. The tender stages come from the client's own
+ * workflow: only those the admin shows to this role, grouped under headings
+ * by their kind (Tenders, Bidding, Results, After the win).
+ */
 export function tenantMenu(
-  stages: { id: string; label: string; color: StageColor }[],
+  stages: MenuStage[],
   counts: Record<string, number>,
   total: number,
+  roleKey: string,
 ): MenuGroup[] {
+  const mine = stages.filter((s) => inMenuFor(s, roleKey))
+  const stageItems = (title: string): MenuItem[] => {
+    const types = SIDEBAR_GROUPS.find((g) => g.title === title)!.types
+    return mine
+      .filter((s) => types.includes(s.type))
+      .map((s) => ({
+        label: s.label,
+        to: `/tenders?stage=${s.id}`,
+        dot: s.color,
+        count: counts[s.id] ?? 0,
+      }))
+  }
   return [
     { items: [{ label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard }] },
     {
       title: 'Tenders',
       items: [
         { label: 'All tenders', to: '/tenders', icon: Rows3, count: total },
-        ...stages.map((s) => ({
-          label: s.label,
-          to: `/tenders?stage=${s.id}`,
-          dot: s.color,
-          count: counts[s.id] ?? 0,
-        })),
+        ...stageItems('Tenders'),
         {
           label: 'Import from Excel',
           to: '/tenders/import',
@@ -60,9 +80,12 @@ export function tenantMenu(
         },
       ],
     },
+    { title: 'Bidding', items: stageItems('Bidding') },
+    { title: 'Results', items: stageItems('Results') },
     {
       title: 'After the win',
       items: [
+        ...stageItems('After the win'),
         {
           label: 'Installed assets',
           to: '/assets',

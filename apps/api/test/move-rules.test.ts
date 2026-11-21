@@ -201,4 +201,58 @@ describe('stage move rules', () => {
     ).toBe(403)
     expect((await as('post', '/tenders/import')).status).toBe(403)
   })
+
+  it('admins choose who sees each stage in the menu, and can reset to the defaults', async () => {
+    const api = (method: 'get' | 'post' | 'patch' | 'put', path: string, token = adminToken) =>
+      request(app)[method](`/api/workflow${path}`).set('Host', ACME).set(bearer(token))
+    const keysInOrder = async () =>
+      ((await api('get', '/stages')).body as StageSummary[]).map((s) => s.key)
+
+    // Defaults copy the old TMS menus.
+    expect(stages.new!.menuRoles).toEqual(['admin', 'viewer'])
+    expect(stages.assigned!.menuRoles).toEqual(['admin', 'agent', 'viewer'])
+    expect(stages['assigned-to-engineer']!.menuRoles).toEqual(['admin', 'engineer', 'viewer'])
+    const defaultOrder = await keysInOrder()
+
+    // Changing things.
+    expect(
+      (await api('patch', `/stages/${stages.new!.id}`).send({ menuRoles: ['nope'] })).body.error
+        .code,
+    ).toBe('ROLE_NOT_FOUND')
+    expect(
+      (await api('patch', `/stages/${stages.new!.id}`, agent.token).send({ menuRoles: null }))
+        .status,
+    ).toBe(403)
+    await api('patch', `/stages/${stages.new!.id}`).send({ menuRoles: null })
+    await api('patch', `/stages/${stages.won!.id}`).send({ label: 'Order received' })
+    await api('patch', `/stages/${stages['price-review']!.id}`).send({ agentNext: ['won'] })
+    const own = await api('post', '/stages').send({ label: 'Tech evaluation', type: 'review' })
+    const ids = ((await api('get', '/stages')).body as StageSummary[]).map((s) => s.id).reverse()
+    await api('put', '/stages/order').send({ ids })
+
+    // One stage, one part: only that changes.
+    const one = await api('post', '/stages/reset').send({
+      parts: ['menus'],
+      stageId: stages.new!.id,
+    })
+    const after = Object.fromEntries((one.body as StageSummary[]).map((s) => [s.key, s]))
+    expect(after.new!.menuRoles).toEqual(['admin', 'viewer'])
+    expect(after.won!.label).toBe('Order received')
+
+    // Everything: names, moves, order back; the own stage is kept after the last review stage.
+    expect((await api('post', '/stages/reset').send({ parts: [] })).status).toBe(400)
+    await api('post', '/stages/reset').send({
+      parts: ['look', 'order', 'settings', 'moves', 'menus'],
+    })
+    const reset = Object.fromEntries(
+      ((await api('get', '/stages')).body as StageSummary[]).map((s) => [s.key, s]),
+    )
+    expect(reset.won!.label).toBe('Won')
+    expect(reset['price-review']!.agentNext).toEqual([])
+    const order = await keysInOrder()
+    const ownKey = (own.body as StageSummary).key
+    expect(order.filter((k) => k !== ownKey)).toEqual(defaultOrder)
+    expect(order.indexOf(ownKey)).toBe(order.indexOf('criteria-review') + 1)
+    expect(reset[ownKey]!.label).toBe('Tech evaluation')
+  })
 })

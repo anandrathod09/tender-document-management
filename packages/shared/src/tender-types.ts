@@ -19,6 +19,8 @@ export interface StageSummary {
   agentNext: string[] | null
   /** Extra stage keys an admin may move to; null = any stage. */
   managerNext: string[] | null
+  /** Role keys that see the stage in their sidebar menu; null = everyone. */
+  menuRoles: string[] | null
 }
 
 export interface StageRef {
