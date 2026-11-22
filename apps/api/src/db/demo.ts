@@ -4,6 +4,7 @@
  *   - owner panel: owner@demo.test / demo-owner-password
  *   - demo client "demo": admin@demo.test / demo-password-1
  *   - an Agent in the demo client: agent@demo.test / demo-password-1
+ *   - an Engineer in the demo client: engineer@demo.test / demo-password-1
  *   - a Viewer (read only) in the demo client: viewer@demo.test / demo-password-1
  * plus a bidding company and a few sample tenders.
  *
@@ -13,24 +14,29 @@
  * these public passwords can never exist on a live server.
  */
 import ExcelJS from 'exceljs'
-import { asc, count, eq, isNull } from 'drizzle-orm'
+import { asc, count, desc, eq, isNull } from 'drizzle-orm'
+import { installationReportSchema } from '@tdm/shared'
 import { env } from '../config/env'
 import { addDays, todayIn } from '../lib/dates'
 import { hashPassword } from '../lib/password'
 import { provisionOrganization } from '../modules/owner/service'
+import { saveReport } from '../modules/installation/service'
 import { importTenders } from '../modules/tenders/import'
-import { assignTender } from '../modules/tenders/service'
+import { assignTender, moveTender } from '../modules/tenders/service'
 import type { TenantAuth } from '../types/express'
 import { db, pool } from './client'
 import { orgWhere } from './scope'
 import {
   biddingCompanies,
+  installationConsignees,
+  installationReports,
   organizations,
   plans,
   platformUsers,
   roles,
   tenders,
   users,
+  workflowStages,
 } from './schema'
 
 export const DEMO = {
@@ -40,8 +46,9 @@ export const DEMO = {
   adminEmail: 'admin@demo.test',
   adminPassword: 'demo-password-1',
   agentEmail: 'agent@demo.test',
+  engineerEmail: 'engineer@demo.test',
   viewerEmail: 'viewer@demo.test',
-  /** The agent's and viewer's password. */
+  /** The agent's, engineer's and viewer's password. */
   memberPassword: 'demo-password-1',
 } as const
 
@@ -300,6 +307,109 @@ async function ensureAgent(orgId: string) {
   return free.length
 }
 
+/** The normal path a tender takes from "Assigned" to the engineer, as the admin moves it. */
+const PATH_TO_ENGINEER = [
+  'in-progress',
+  'price-review',
+  'ready-to-bid',
+  'submitted',
+  'won',
+  'assigned-to-engineer',
+] as const
+
+/**
+ * An Engineer login. Engineers see only the tenders where they are the
+ * engineer on a consignee, so if they have none, one tender is taken through
+ * the normal steps (assigned to the demo agent, bid, won, assigned to
+ * engineer) and given a consignee with the demo engineer and two units.
+ * A tender that already has an installation report is never touched.
+ * Returns the reference number of that tender, or null when nothing changed.
+ */
+async function ensureEngineer(orgId: string): Promise<string | null> {
+  const engineer = await ensureMember(orgId, 'engineer', DEMO.engineerEmail, 'Demo Engineer')
+  if (!engineer) return null
+  const [linked] = await db
+    .select({ n: count() })
+    .from(installationConsignees)
+    .where(
+      orgWhere(installationConsignees, orgId, eq(installationConsignees.engineerId, engineer.id)),
+    )
+  if ((linked?.n ?? 0) > 0) return null
+
+  const auth = await adminAuth(orgId)
+  const stages = await db.select().from(workflowStages).where(orgWhere(workflowStages, orgId))
+  const byKey = new Map(stages.map((s) => [s.key, s]))
+  const afterWin = new Set(
+    stages.filter((s) => s.type === 'won' || s.type === 'execution').map((s) => s.id),
+  )
+  const all = await db
+    .select()
+    .from(tenders)
+    .where(orgWhere(tenders, orgId))
+    .orderBy(desc(tenders.createdAt))
+
+  // A won tender with no installation report yet (an existing report is never
+  // replaced), else a free tender walked along the normal path.
+  const withReport = new Set(
+    (
+      await db
+        .select({ tenderId: installationReports.tenderId })
+        .from(installationReports)
+        .where(orgWhere(installationReports, orgId))
+    ).map((r) => r.tenderId),
+  )
+  let tender = all.find((t) => afterWin.has(t.stageId) && !withReport.has(t.id))
+  if (tender && stages.find((s) => s.id === tender!.stageId)?.type === 'won') {
+    const next = byKey.get('assigned-to-engineer')
+    if (next) await moveTender(auth, tender.id, { stageId: next.id, comment: 'Demo data' })
+  }
+  if (!tender) {
+    const free = all.find((t) => !t.assignedAgentId && t.deadline >= todayIn(auth.org.timezone))
+    const [agent] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(orgWhere(users, orgId, eq(users.email, DEMO.agentEmail)))
+    if (!free || !agent) return null
+    try {
+      await assignTender(auth, free.id, { agentId: agent.id })
+      for (const key of PATH_TO_ENGINEER) {
+        const stage = byKey.get(key)
+        if (!stage) throw new Error(`stage "${key}" is missing`)
+        await moveTender(auth, free.id, {
+          stageId: stage.id,
+          comment: 'Demo data',
+          ...(stage.type === 'won' && { awardAmount: Math.round(free.estimatedCost ?? 100000) }),
+        })
+      }
+    } catch (err) {
+      console.warn(`Could not prepare a tender for the demo engineer: ${(err as Error).message}`)
+      return null
+    }
+    tender = free
+  }
+
+  await saveReport(
+    auth,
+    tender.id,
+    installationReportSchema.parse({
+      customerName: tender.buyerOrganization,
+      consignees: [
+        {
+          name: `${tender.buyerOrganization ?? 'Customer'} – Main office`,
+          designation: 'Store officer',
+          phone: '9800000000',
+          engineerId: engineer.id,
+          assets: [
+            { itemName: 'Delivered item 1', serialNumber: 'DEMO-0001', warrantyMonths: 12 },
+            { itemName: 'Delivered item 2', serialNumber: 'DEMO-0002', warrantyMonths: 12 },
+          ],
+        },
+      ],
+    }),
+  )
+  return tender.referenceNo
+}
+
 async function main() {
   assertLocal()
   const planId = await ensurePlan()
@@ -309,6 +419,7 @@ async function main() {
   const created = await ensureTenders(org.id)
   const assigned = await ensureAgent(org.id)
   await ensureMember(org.id, 'viewer', DEMO.viewerEmail, 'Demo Viewer')
+  const engineerTender = await ensureEngineer(org.id)
 
   const url = env.PUBLIC_URL_TEMPLATE.replace('{slug}', DEMO.slug)
   const ownerUrl = env.PUBLIC_URL_TEMPLATE.replace('{slug}', env.OWNER_SUBDOMAIN)
@@ -318,6 +429,7 @@ Demo ready${created ? ` (${created} sample tenders added)` : ''}
   Demo client   ${url}
                 ${DEMO.adminEmail} / ${DEMO.adminPassword}   (Admin)
                 ${DEMO.agentEmail} / ${DEMO.memberPassword}   (Agent${assigned ? `, ${assigned} tenders assigned` : ''})
+                ${DEMO.engineerEmail} / ${DEMO.memberPassword}   (Engineer${engineerTender ? `, engineer on ${engineerTender}` : ''})
                 ${DEMO.viewerEmail} / ${DEMO.memberPassword}   (Viewer, read only)
 
   Owner panel   ${ownerUrl}

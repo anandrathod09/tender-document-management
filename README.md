@@ -56,21 +56,26 @@ To try the app straight away, create the demo data:
 npm run db:demo
 ```
 
-| Open                                                            | Email              | Password              |
-| --------------------------------------------------------------- | ------------------ | --------------------- |
-| http://demo.localhost:5173 (demo client "Demo Infra Pvt Ltd")   | `admin@demo.test`  | `demo-password-1`     |
-| http://demo.localhost:5173 (same client, signed in as an Agent) | `agent@demo.test`  | `demo-password-1`     |
-| http://demo.localhost:5173 (same client, signed in as a Viewer) | `viewer@demo.test` | `demo-password-1`     |
-| http://owner.localhost:5173 (owner panel)                       | `owner@demo.test`  | `demo-owner-password` |
+| Open                                                               | Email                | Password              |
+| ------------------------------------------------------------------ | -------------------- | --------------------- |
+| http://demo.localhost:5173 (demo client "Demo Infra Pvt Ltd")      | `admin@demo.test`    | `demo-password-1`     |
+| http://demo.localhost:5173 (same client, signed in as an Agent)    | `agent@demo.test`    | `demo-password-1`     |
+| http://demo.localhost:5173 (same client, signed in as an Engineer) | `engineer@demo.test` | `demo-password-1`     |
+| http://demo.localhost:5173 (same client, signed in as a Viewer)    | `viewer@demo.test`   | `demo-password-1`     |
+| http://owner.localhost:5173 (owner panel)                          | `owner@demo.test`    | `demo-owner-password` |
 
 What the command does:
 
 - Adds a bidding company and 3 sample tenders, but only if the demo client has no tenders yet, so your work is never overwritten.
 - Creates the Viewer login (read only).
 - Creates the Agent login and, if the agent has no tenders yet, assigns the two oldest unassigned tenders to them.
+- Creates the Engineer login. If the engineer is not on any tender yet, it takes one tender through the normal steps (assigned, bid, won, "Assigned to engineer") and adds an installation report with a consignee for "Demo Engineer" and two units. A tender that already has an installation report is never changed.
 - Running it again resets these logins, for example after trying two-step login.
 
-**Seeing the app as an agent.** There is no separate agent app. An Agent signs in at the same address and sees the same screens, limited by their role (see [Roles](#roles-and-what-each-person-sees)). To try it, sign in as `agent@demo.test` in a private window, or assign a tender to "Demo Agent" as the admin and watch it appear on the agent's side.
+**Seeing the app as an agent or engineer.** There is no separate agent or engineer app. Everyone signs in at the same address and sees the same screens, limited by their role (see [Roles](#roles-and-what-each-person-sees)). To try it, sign in as `agent@demo.test` or `engineer@demo.test` in a private window.
+
+- The **agent** sees the tenders assigned to them and moves them through bidding.
+- The **engineer** sees only the tenders where they are the engineer on a consignee (Installation page → Consignees → Engineer). Their menu shows "Assigned to engineer", "Completed", "Installed assets" and "Service tickets". To give them more work, open a won tender as the admin, go to its Installation page and choose "Demo Engineer" on a consignee.
 
 These passwords are public, so the command **refuses to run** when `NODE_ENV=production` or `BASE_DOMAIN` is not `localhost`. Real owner accounts come from `npm run db:seed`, which prints a random password once.
 
