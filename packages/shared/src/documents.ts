@@ -7,6 +7,8 @@ export const FILE_KINDS = [
   'company_logo',
   'company_signature',
   'compliance_pdf',
+  /** Attached to an installation consignee by its engineer or an admin. */
+  'consignee_document',
 ] as const
 export type FileKind = (typeof FILE_KINDS)[number]
 

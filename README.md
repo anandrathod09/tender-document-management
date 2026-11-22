@@ -69,13 +69,13 @@ What the command does:
 - Adds a bidding company and 3 sample tenders, but only if the demo client has no tenders yet, so your work is never overwritten.
 - Creates the Viewer login (read only).
 - Creates the Agent login and, if the agent has no tenders yet, assigns the two oldest unassigned tenders to them.
-- Creates the Engineer login. If the engineer is not on any tender yet, it takes one tender through the normal steps (assigned, bid, won, "Assigned to engineer") and adds an installation report with a consignee for "Demo Engineer" and two units. A tender that already has an installation report is never changed.
+- Creates the Engineer login. If the engineer is not on any tender yet, it takes one tender through the normal steps (assigned, bid, won, "Assigned to engineer") and adds an installation report with a consignee for "Demo Engineer" and two report templates (a desktop with Monitor and CPU serial numbers, and a printer with one serial number). A tender that already has an installation report is never changed.
 - Running it again resets these logins, for example after trying two-step login.
 
 **Seeing the app as an agent or engineer.** There is no separate agent or engineer app. Everyone signs in at the same address and sees the same screens, limited by their role (see [Roles](#roles-and-what-each-person-sees)). To try it, sign in as `agent@demo.test` or `engineer@demo.test` in a private window.
 
 - The **agent** sees the tenders assigned to them and moves them through bidding.
-- The **engineer** sees only the tenders where they are the engineer on a consignee (Installation page → Consignees → Engineer). Their menu shows "Assigned to engineer", "Completed", "Installed assets" and "Service tickets". To give them more work, open a won tender as the admin, go to its Installation page and choose "Demo Engineer" on a consignee.
+- The **engineer** sees only the tenders where they are the engineer on a consignee (Installation page → Consignees → Engineer). Their dashboard is "My Assigned Installations" (their consignees with progress), and their menu shows "Assigned to engineer", "Completed", "Installed assets" and "Service tickets". To give them more work, open a won tender as the admin, go to its Installation Report page and choose "Demo Engineer" under Assign Engineer on a consignee.
 
 These passwords are public, so the command **refuses to run** when `NODE_ENV=production` or `BASE_DOMAIN` is not `localhost`. Real owner accounts come from `npm run db:seed`, which prints a random password once.
 
@@ -159,13 +159,14 @@ Every client starts with four roles. Each person has their own login: the admin 
 |                                                                      | Admin                                              | Agent                                            | Engineer                                         | Viewer                          |
 | -------------------------------------------------------------------- | -------------------------------------------------- | ------------------------------------------------ | ------------------------------------------------ | ------------------------------- |
 | Tenders they see                                                     | all                                                | only those assigned to them                      | those where they are the engineer on a consignee | all                             |
-| Dashboard and stage counts                                           | all tenders                                        | their own tenders                                | their own tenders                                | all tenders                     |
+| Dashboard and stage counts                                           | all tenders                                        | their own tenders                                | "My Assigned Installations" (their consignees)   | all tenders                     |
 | Move a tender to another stage                                       | yes, following the [move rules](#stage-move-rules) | yes, their own tenders, following the move rules | no                                               | no                              |
 | Assign tenders, watchlist, reject                                    | yes                                                | no                                               | no                                               | no                              |
 | Upload Excel, export to Excel                                        | yes                                                | no                                               | no                                               | no                              |
-| Add documents and make compliance letters on a tender                | yes                                                | yes, on their tenders                            | yes, on their tenders                            | no (can open and download them) |
-| Installation reports, service tickets                                | yes                                                | no                                               | yes                                              | no                              |
-| Installed assets page                                                | yes                                                | **hidden by default** (see below)                | yes                                              | yes                             |
+| Add documents and make compliance letters on a tender                | yes                                                | yes, on their tenders                            | documents only, on their tenders                 | no (can open and download them) |
+| Installation reports                                                 | create and edit everything                         | no                                               | their own consignees only (see below)            | read only                       |
+| Service tickets                                                      | yes                                                | no                                               | yes                                              | no                              |
+| Installed assets page                                                | yes                                                | **hidden by default** (see below)                | their own units                                  | yes                             |
 | Reports                                                              | yes                                                | yes                                              | no                                               | yes                             |
 | Users, Workflow stages, Bidding companies, Letter templates, Billing | yes                                                | no                                               | no                                               | no                              |
 
@@ -173,7 +174,27 @@ Every client starts with four roles. Each person has their own login: the admin 
 
 **Installed assets for agents.** The page is hidden from agents unless the admin turns on **Agents see Installed assets** on the Users page. The switch adds or removes the `asset.view` permission on the Agent role, and agents see the change the next time they load the app.
 
+**Engineers work on their own consignees.** An engineer sees only the consignees where they are the engineer, on the tender page, the Installation Report page, their dashboard and Installed assets. On those consignees they can fill in the rows (serial numbers, installed yes/no, installation date, remarks), set their engineer status, and upload documents (PDF, JPG or PNG, such as the signed installation certificate or site photos). The admin sets up everything else: order details, consignees, the engineer, and the report templates with their item name, warranty and number of rows. An engineer can fill rows up to that number; to add more rows, the admin adds them.
+
 **Notifications.** An agent gets a bell notification when a tender is assigned to them, and when someone else moves one of their tenders.
+
+## Installation reports
+
+After a tender is won, the admin fills in its **Installation Report** (the old TMS "Hardware Installation Report"): the order details, then one or more **consignees** (delivery locations), each with an engineer.
+
+Each consignee has one or more **report templates**, as in the old TMS. "Add Report Template" asks for:
+
+- **Template 1:** Monitor serial number, CPU serial number, installation status, remark.
+- **Template 2:** One common serial number, installation status, remark.
+- **Number of items:** how many rows the template has.
+
+Each template has its own item name and configuration (several lines), its warranty in years and months, and its rows. One consignee can mix both types, for example desktops with Monitor and CPU serials and printers with one serial.
+
+- **Rows left empty are not saved.** They stay as rows to fill in on screen and in the PDF, but they are not units on the Installed assets page until someone fills them in.
+- **Generate PDF** prints all consignees, or one chosen consignee. The table numbers each template once and writes its item name once down all its rows. A common serial spans both the Monitor and CPU columns, as in the old report.
+- **On the tender page,** the whole report is shown read only below the documents. Each consignee also has its uploaded documents there.
+- **In the "Assigned to engineer" and "Completed" lists,** extra columns show each consignee and its engineer, with their email and phone (the old "Engineer Tenders" page). The search also finds consignee and engineer names.
+- **When a client is moved from the old TMS,** each old template keeps its type, item name, warranty and number of rows. Rows with nothing filled in are skipped, and consignee documents stay with their consignee.
 
 ## Workflow stages
 

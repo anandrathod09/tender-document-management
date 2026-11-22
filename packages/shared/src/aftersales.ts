@@ -40,18 +40,51 @@ const text = (max: number) =>
     .nullable()
     .optional()
 
-export const assetInputSchema = z.object({
+/**
+ * How a report template records serial numbers (the old TMS "Report template 1 / 2"):
+ * one common serial per row, or a monitor serial and a CPU serial per row.
+ */
+export const SERIAL_TYPES = ['common', 'split'] as const
+export type SerialType = (typeof SERIAL_TYPES)[number]
+export const SERIAL_TYPE_LABELS: Record<SerialType, string> = {
+  common: 'Serial No, Installation Status, Remark',
+  split: 'Monitor Serial No, CPU Serial No, Installation Status, Remark',
+}
+
+/** One row of a report template: a physical unit. */
+export const unitInputSchema = z.object({
   /** Present for units already saved; keeps links from service tickets. */
   id: z.uuid().optional(),
-  itemName: z.string().trim().min(1, 'Item name is required').max(500),
-  makeModel: text(200),
   serialNumber: text(100),
   monitorSerial: text(100),
   cpuSerial: text(100),
   installStatus: z.enum(INSTALL_STATUSES).default('pending'),
   installedOn: isoDate,
-  warrantyMonths: z.number().int().min(0).max(240).default(0),
   remarks: text(500),
+})
+export type UnitInput = z.output<typeof unitInputSchema>
+
+/** Rows with nothing filled in are placeholders: they are not saved as units. */
+export function isBlankUnit(u: UnitInput): boolean {
+  return (
+    !u.serialNumber &&
+    !u.monitorSerial &&
+    !u.cpuSerial &&
+    !u.remarks &&
+    !u.installedOn &&
+    u.installStatus === 'pending'
+  )
+}
+
+/** A report template inside a consignee: one item (name and configuration) and its rows. */
+export const itemInputSchema = z.object({
+  id: z.uuid().optional(),
+  itemName: z.string().trim().min(1, 'Item name and configuration is required').max(500),
+  serialType: z.enum(SERIAL_TYPES).default('common'),
+  warrantyMonths: z.number().int().min(0).max(240).default(0),
+  /** Rows to show and print; rows left empty are kept as placeholders only. */
+  quantity: z.number().int().min(1).max(500).default(1),
+  units: z.array(unitInputSchema).max(500).default([]),
 })
 
 export const consigneeInputSchema = z.object({
@@ -64,7 +97,16 @@ export const consigneeInputSchema = z.object({
   engineerId: z.uuid().nullable().optional(),
   status: z.enum(ENGINEER_STATUSES).default('assigned'),
   callAlignedDate: isoDate,
-  assets: z.array(assetInputSchema).max(2000).default([]),
+  items: z.array(itemInputSchema).max(100).default([]),
+})
+
+/** What the engineer on a consignee may change: its status and the rows of its templates. */
+export const consigneeWorkSchema = z.object({
+  status: z.enum(ENGINEER_STATUSES),
+  items: z
+    .array(z.object({ id: z.uuid(), units: z.array(unitInputSchema).max(500).default([]) }))
+    .max(100)
+    .default([]),
 })
 
 export const installationReportSchema = z.object({
@@ -96,6 +138,15 @@ export interface InstalledAssetRow {
   remarks: string | null
 }
 
+export interface InstallationItemRow {
+  id: string
+  itemName: string
+  serialType: SerialType
+  warrantyMonths: number
+  quantity: number
+  units: InstalledAssetRow[]
+}
+
 export interface ConsigneeRow {
   id: string
   name: string
@@ -103,10 +154,21 @@ export interface ConsigneeRow {
   phone: string | null
   email: string | null
   fax: string | null
-  engineer: { id: string; name: string } | null
+  engineer: { id: string; name: string; email: string; phone: string | null } | null
   status: EngineerStatus
   callAlignedDate: string | null
-  assets: InstalledAssetRow[]
+  items: InstallationItemRow[]
+  /** Files the engineer or admin attached to this consignee (certificates, site photos). */
+  documents: ConsigneeDocument[]
+}
+
+export interface ConsigneeDocument {
+  id: string
+  originalName: string
+  mimeType: string
+  sizeBytes: number
+  uploadedBy: { id: string; name: string } | null
+  createdAt: string
 }
 
 export interface InstallationReport {
@@ -124,7 +186,33 @@ export interface InstallationReport {
   contactPersonPhone: string | null
   department: string | null
   consignees: ConsigneeRow[]
+  /** True for an engineer: only their own consignees are included. */
+  ownOnly: boolean
   updatedAt: string
+}
+
+/** A consignee with its tender and progress, for the engineer's "My Assigned Installations". */
+export interface InstallationSite {
+  id: string
+  name: string
+  designation: string | null
+  phone: string | null
+  email: string | null
+  callAlignedDate: string | null
+  status: EngineerStatus
+  engineer: { id: string; name: string } | null
+  tender: {
+    id: string
+    referenceNo: string
+    title: string
+    buyerOrganization: string | null
+    location: string | null
+    value: number
+    stageLabel: string
+  }
+  /** Rows across its report templates (the quantity to install). */
+  totalItems: number
+  installedItems: number
 }
 
 // ---------------------------------------------------------------------------

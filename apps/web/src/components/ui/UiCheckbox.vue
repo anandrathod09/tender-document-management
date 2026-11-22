@@ -3,7 +3,13 @@ import { Check, Minus } from 'lucide-vue-next'
 import { computed, ref, watchEffect } from 'vue'
 
 /** Tick box of the original TMS: a 24px white box that fills blue when ticked. */
-const props = defineProps<{ label: string; indeterminate?: boolean; disabled?: boolean }>()
+const props = defineProps<{
+  label: string
+  indeterminate?: boolean
+  disabled?: boolean
+  /** Shows the label next to the box (tables keep it for screen readers only). */
+  showLabel?: boolean
+}>()
 const model = defineModel<boolean>({ default: false })
 const input = ref<HTMLInputElement | null>(null)
 const partial = computed(() => !!props.indeterminate && !model.value)
@@ -17,11 +23,11 @@ watchEffect(() => {
 <template>
   <label
     :class="[
-      'inline-flex cursor-pointer items-center justify-center p-1',
+      'inline-flex cursor-pointer items-center justify-center gap-2 p-1',
       disabled && 'cursor-not-allowed opacity-60',
     ]"
   >
-    <span class="sr-only">{{ label }}</span>
+    <span v-if="!showLabel" class="sr-only">{{ label }}</span>
     <input ref="input" v-model="model" type="checkbox" :disabled="disabled" class="peer sr-only" />
     <span
       :class="[
@@ -35,5 +41,6 @@ watchEffect(() => {
       <Check v-if="model" class="size-4" stroke-width="3" />
       <Minus v-else-if="partial" class="size-4" stroke-width="3" />
     </span>
+    <span v-if="showLabel" class="text-sm text-gray-600 dark:text-gray-400">{{ label }}</span>
   </label>
 </template>

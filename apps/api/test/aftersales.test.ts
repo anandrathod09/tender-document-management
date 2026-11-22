@@ -65,7 +65,11 @@ describe('installation reports, assets, tickets and reports', () => {
     engineer = await addUser(ACME, adminToken, 'engineer', 'eng@acme.test')
   })
 
-  const report = (units: object[], extra: object = {}) => ({
+  /** Each unit becomes its own report template (item name and warranty come from the unit). */
+  const report = (
+    units: ({ itemName: string; warrantyMonths?: number } & Record<string, unknown>)[],
+    extra: object = {},
+  ) => ({
     poNumber: 'PO-55',
     poDate: '2026-11-01',
     reportDate: '2026-11-10',
@@ -76,42 +80,66 @@ describe('installation reports, assets, tickets and reports', () => {
         designation: 'Storekeeper',
         engineerId: engineer.id,
         status: 'execution',
-        assets: units,
+        items: units.map(({ itemName, warrantyMonths, ...u }) => ({
+          itemName,
+          warrantyMonths: warrantyMonths ?? 0,
+          units: [u],
+        })),
       },
     ],
     ...extra,
   })
+  const unitsOf = (r: InstallationReport, ci = 0) => r.consignees[ci]!.items.flatMap((i) => i.units)
 
   it('only takes an installation report once the tender is won', async () => {
     const early = await put(report([]))
     expect(early.body.error.code).toBe('NOT_WON')
   })
 
-  it('saves consignees and units, keeps unit ids on later saves, and gives the engineer access', async () => {
+  it('saves report templates and their rows, skips empty rows, and keeps unit ids', async () => {
     await win()
-    const first = await put(
-      report([
+    const first = await put({
+      ...report([]),
+      consignees: [
         {
-          itemName: 'Desktop computer',
-          serialNumber: 'SN-1',
-          installStatus: 'installed',
-          installedOn: '2026-11-12',
-          warrantyMonths: 36,
+          name: 'Stores Officer',
+          engineerId: engineer.id,
+          items: [
+            {
+              itemName: 'Desktop computer\ni5, 16GB, 512GB SSD',
+              serialType: 'split',
+              warrantyMonths: 36,
+              quantity: 3,
+              units: [
+                {
+                  monitorSerial: 'M-1',
+                  cpuSerial: 'C-1',
+                  installStatus: 'installed',
+                  installedOn: '2026-11-12',
+                },
+                { monitorSerial: 'M-2', cpuSerial: 'C-2' },
+                {}, // nothing filled in: a placeholder row, not a unit
+              ],
+            },
+            { itemName: 'Laser printer', quantity: 1, units: [{ serialNumber: 'PR-1' }] },
+          ],
         },
-        {
-          itemName: 'Desktop computer',
-          serialNumber: 'SN-2',
-          installStatus: 'pending',
-          warrantyMonths: 36,
-        },
-      ]),
-    )
+      ],
+    })
     expect(first.status).toBe(200)
     const saved = first.body as InstallationReport
-    expect(saved.consignees[0]!.assets.map((a) => a.serialNumber)).toEqual(['SN-1', 'SN-2'])
-    expect(saved.consignees[0]!.engineer).toEqual({ id: engineer.id, name: 'eng' })
+    const [desktops, printers] = saved.consignees[0]!.items
+    expect(desktops).toMatchObject({ serialType: 'split', quantity: 3, warrantyMonths: 36 })
+    expect(desktops!.units.map((u) => u.cpuSerial)).toEqual(['C-1', 'C-2'])
+    // Units carry the template's item name and warranty (for the assets list and tickets).
+    expect(desktops!.units[0]).toMatchObject({
+      itemName: 'Desktop computer\ni5, 16GB, 512GB SSD',
+      warrantyMonths: 36,
+    })
+    expect(printers).toMatchObject({ serialType: 'common', units: [{ serialNumber: 'PR-1' }] })
+    expect(saved.consignees[0]!.engineer).toMatchObject({ id: engineer.id, name: 'eng' })
 
-    // The engineer now sees the tender and was notified.
+    // The engineer now sees the tender and was notified…
     expect(
       (
         await request(app)
@@ -136,39 +164,211 @@ describe('installation reports, assets, tickets and reports', () => {
       ).status,
     ).toBe(404)
 
-    // Engineer updates unit 2 on site; unit ids stay the same; the removed unit is gone.
-    const c = saved.consignees[0]!
-    const second = await put(
-      {
+    // A later save keeps unit ids; a row that is cleared is removed.
+    const second = await put({
+      ...report([]),
+      consignees: [
+        {
+          ...saved.consignees[0]!,
+          engineerId: engineer.id,
+          items: [
+            {
+              ...desktops!,
+              units: [
+                desktops!.units[0]!,
+                { ...desktops!.units[1]!, monitorSerial: '', cpuSerial: '' },
+              ],
+            },
+            printers!,
+          ],
+        },
+      ],
+    })
+    expect(second.status).toBe(200)
+    const after = (second.body as InstallationReport).consignees[0]!
+    expect(after.items[0]!.id).toBe(desktops!.id)
+    expect(after.items[0]!.units.map((u) => u.id)).toEqual([desktops!.units[0]!.id])
+  })
+
+  it('lets the engineer work only on their own consignee', async () => {
+    await win()
+    const other = await addUser(ACME, adminToken, 'engineer', 'eng2@acme.test')
+    const saved = (
+      await put({
         ...report([]),
         consignees: [
           {
-            ...c,
+            name: 'Main office',
             engineerId: engineer.id,
-            assets: [{ ...c.assets[1]!, installStatus: 'installed', installedOn: '2026-11-15' }],
+            items: [{ itemName: 'Desktop', serialType: 'split', quantity: 2, units: [] }],
+          },
+          {
+            name: 'Branch office',
+            engineerId: other.id,
+            items: [{ itemName: 'UPS', quantity: 1, units: [{ serialNumber: 'UPS-1' }] }],
           },
         ],
-      },
-      engineer.token,
-    )
-    expect(second.status).toBe(200)
-    const after = (second.body as InstallationReport).consignees[0]!
-    expect(after.id).toBe(c.id)
-    expect(after.assets).toHaveLength(1)
-    expect(after.assets[0]).toMatchObject({ id: c.assets[1]!.id, installStatus: 'installed' })
+      })
+    ).body as InstallationReport
+    const [mine, theirs] = saved.consignees
+    const base = `/api/tenders/${tenderId}/installation-report`
+
+    // They only see their own consignee.
+    const seen = (await request(app).get(base).set('Host', ACME).set(bearer(engineer.token)))
+      .body as InstallationReport
+    expect(seen.ownOnly).toBe(true)
+    expect(seen.consignees.map((c) => c.name)).toEqual(['Main office'])
+
+    // They cannot save the whole report.
+    expect((await put(report([]), engineer.token)).status).toBe(403)
+
+    // They fill in their rows and status.
+    const patch = (consigneeId: string, body: object, token = engineer.token) =>
+      request(app)
+        .patch(`${base}/consignees/${consigneeId}`)
+        .set('Host', ACME)
+        .set(bearer(token))
+        .send(body)
+    const ok = await patch(mine!.id, {
+      status: 'execution',
+      items: [
+        {
+          id: mine!.items[0]!.id,
+          units: [
+            {
+              monitorSerial: 'M-9',
+              cpuSerial: 'C-9',
+              installStatus: 'installed',
+              installedOn: '2026-11-20',
+            },
+            {},
+          ],
+        },
+      ],
+    })
+    expect(ok.status).toBe(200)
+    const updated = (ok.body as InstallationReport).consignees[0]!
+    expect(updated.status).toBe('execution')
+    expect(updated.items[0]!.units).toHaveLength(1)
+    expect(updated.items[0]!.units[0]).toMatchObject({ cpuSerial: 'C-9', itemName: 'Desktop' })
+
+    // Not more rows than the admin set up…
+    const tooMany = await patch(mine!.id, {
+      status: 'execution',
+      items: [
+        {
+          id: mine!.items[0]!.id,
+          units: [{ cpuSerial: 'A' }, { cpuSerial: 'B' }, { cpuSerial: 'C' }],
+        },
+      ],
+    })
+    expect(tooMany.body.error.code).toBe('TOO_MANY_ROWS')
+    // …nor templates or consignees that are not theirs.
+    const foreignItem = await patch(mine!.id, {
+      status: 'execution',
+      items: [{ id: theirs!.items[0]!.id, units: [] }],
+    })
+    expect(foreignItem.body.error.code).toBe('ITEM_NOT_FOUND')
+    expect((await patch(theirs!.id, { status: 'completed', items: [] })).status).toBe(404)
+
+    // The installed assets list shows only their units.
+    const assets = (
+      await request(app).get('/api/assets').set('Host', ACME).set(bearer(engineer.token))
+    ).body as AssetPage
+    expect(assets.items.map((a) => a.cpuSerial)).toEqual(['C-9'])
+  })
+
+  it('keeps documents per consignee, visible to its engineer and the admin', async () => {
+    await win()
+    const other = await addUser(ACME, adminToken, 'engineer', 'eng2@acme.test')
+    const saved = (
+      await put({
+        ...report([]),
+        consignees: [
+          { name: 'Main office', engineerId: engineer.id, items: [] },
+          { name: 'Branch office', engineerId: other.id, items: [] },
+        ],
+      })
+    ).body as InstallationReport
+    const [mine, theirs] = saved.consignees
+    const url = (cid: string) =>
+      `/api/tenders/${tenderId}/installation-report/consignees/${cid}/documents`
+    const pdf = Buffer.from('%PDF-1.4\n1 0 obj<<>>endobj\ntrailer<<>>\n%%EOF')
+
+    const wrongType = await request(app)
+      .post(url(mine!.id))
+      .set('Host', ACME)
+      .set(bearer(engineer.token))
+      .attach('file', Buffer.from('PK\u0003\u0004zip-content'), 'photos.zip')
+    expect(wrongType.body.error.code).toBe('UNSUPPORTED_FILE')
+    const up = await request(app)
+      .post(url(mine!.id))
+      .set('Host', ACME)
+      .set(bearer(engineer.token))
+      .attach('file', pdf, 'installation-certificate.pdf')
+    expect(up.status).toBe(201)
+    // Not onto someone else's consignee.
+    const foreign = await request(app)
+      .post(url(theirs!.id))
+      .set('Host', ACME)
+      .set(bearer(engineer.token))
+      .attach('file', pdf, 'x.pdf')
+    expect(foreign.status).toBe(404)
+
+    const asAdmin = (
+      await request(app)
+        .get(`/api/tenders/${tenderId}/installation-report`)
+        .set('Host', ACME)
+        .set(bearer(adminToken))
+    ).body as InstallationReport
+    expect(asAdmin.consignees[0]!.documents).toEqual([
+      expect.objectContaining({
+        originalName: 'installation-certificate.pdf',
+        uploadedBy: { id: engineer.id, name: 'eng' },
+      }),
+    ])
+    const link = (token: string) =>
+      request(app).post(`/api/files/${up.body.id}/link`).set('Host', ACME).set(bearer(token))
+    expect((await link(engineer.token)).status).toBe(200)
+    expect((await link(adminToken)).status).toBe(200)
+    // The other engineer sees the tender but not this consignee's files.
+    expect((await link(other.token)).status).toBe(404)
+    const del = (token: string) =>
+      request(app).delete(`/api/files/${up.body.id}`).set('Host', ACME).set(bearer(token))
+    expect((await del(other.token)).status).toBe(404)
+    expect((await del(engineer.token)).status).toBe(204)
   })
 
   it('refuses units or consignees that belong to another report', async () => {
     await win()
-    const res = await put(report([{ id: crypto.randomUUID(), itemName: 'Printer' }]))
+    const res = await put(
+      report([{ id: crypto.randomUUID(), itemName: 'Printer', serialNumber: 'P' }]),
+    )
     expect(res.body.error.code).toBe('ASSET_NOT_FOUND')
   })
 
   it('prints the installation report as a PDF', async () => {
     await win()
-    await put(
-      report([{ itemName: 'Laser printer', serialNumber: 'PR-9', installStatus: 'installed' }]),
-    )
+    await put({
+      ...report([]),
+      consignees: [
+        {
+          name: 'Stores Officer',
+          items: [
+            {
+              itemName: 'Desktop\ni5 16GB',
+              serialType: 'split',
+              quantity: 4,
+              units: [{ monitorSerial: 'M-1', cpuSerial: 'C-1', installStatus: 'installed' }],
+            },
+            {
+              itemName: 'Laser printer',
+              units: [{ serialNumber: 'PR-9', installStatus: 'installed' }],
+            },
+          ],
+        },
+      ],
+    })
     const res = await binary(
       request(app)
         .get(`/api/tenders/${tenderId}/installation-report/pdf`)
@@ -238,7 +438,7 @@ describe('installation reports, assets, tickets and reports', () => {
     const saved = (
       await put(report([{ itemName: 'Laptop', serialNumber: 'L-77', installStatus: 'installed' }]))
     ).body as InstallationReport
-    const assetId = saved.consignees[0]!.assets[0]!.id
+    const assetId = unitsOf(saved)[0]!.id
 
     const created = await request(app)
       .post('/api/tickets')
@@ -422,7 +622,7 @@ describe('installation reports, assets, tickets and reports', () => {
       .post('/api/tickets')
       .set('Host', B)
       .set(bearer(other.adminToken))
-      .send({ title: 'Their unit?', description: 'x', assetId: saved.consignees[0]!.assets[0]!.id })
+      .send({ title: 'Their unit?', description: 'x', assetId: unitsOf(saved)[0]!.id })
     expect(ticket.body.error.code).toBe('ASSET_NOT_FOUND')
   })
 })

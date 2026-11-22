@@ -32,6 +32,7 @@ import {
   BILLING_CYCLES,
   PAYMENT_METHODS,
   PAYMENT_STATUSES,
+  SERIAL_TYPES,
   STAGE_TYPES,
   TICKET_PRIORITIES,
   TICKET_STATUSES,
@@ -484,6 +485,8 @@ export const files = mysqlTable(
       onDelete: 'set null',
     }),
     companyId: varchar('company_id', { length: 36 }),
+    // Consignee documents (installation certificates, site photos) also name their consignee.
+    consigneeId: varchar('consignee_id', { length: 36 }),
     uploadedBy: varchar('uploaded_by', { length: 36 }).references(() => users.id),
     createdAt: createdAt(),
     // Deleted files stay 30 days so mistakes can be undone, then are purged.
@@ -492,6 +495,7 @@ export const files = mysqlTable(
   (t) => [
     index('files_org_kind_idx').on(t.organizationId, t.kind, t.deletedAt),
     index('files_org_tender_idx').on(t.organizationId, t.tenderId),
+    index('files_org_consignee_idx').on(t.organizationId, t.consigneeId),
     index('files_deleted_idx').on(t.deletedAt),
   ],
 )
@@ -656,6 +660,28 @@ export const installationConsignees = mysqlTable(
   ],
 )
 
+/**
+ * A report template inside a consignee (the old TMS "Report Template 1, 2…"):
+ * one item with its configuration, how its serial numbers are recorded,
+ * the warranty, and how many rows it has.
+ */
+export const installationItems = mysqlTable(
+  'installation_items',
+  {
+    id: id(),
+    organizationId: organizationId(),
+    consigneeId: varchar('consignee_id', { length: 36 })
+      .notNull()
+      .references(() => installationConsignees.id, { onDelete: 'cascade' }),
+    itemName: varchar('item_name', { length: 500 }).notNull(),
+    serialType: mysqlEnum('serial_type', SERIAL_TYPES).notNull().default('common'),
+    warrantyMonths: int('warranty_months').notNull().default(0),
+    quantity: int('quantity').notNull().default(1),
+    sortOrder: int('sort_order').notNull().default(0),
+  },
+  (t) => [index('installation_items_consignee_idx').on(t.organizationId, t.consigneeId)],
+)
+
 /** One installed physical unit, with its serial numbers and warranty. */
 export const installedAssets = mysqlTable(
   'installed_assets',
@@ -665,6 +691,10 @@ export const installedAssets = mysqlTable(
     consigneeId: varchar('consignee_id', { length: 36 })
       .notNull()
       .references(() => installationConsignees.id, { onDelete: 'cascade' }),
+    // The report template the unit is a row of. Item name and warranty are copied from it.
+    itemId: varchar('item_id', { length: 36 })
+      .notNull()
+      .references(() => installationItems.id, { onDelete: 'cascade' }),
     // Copied from the consignee's report so asset lists need no extra joins.
     tenderId: varchar('tender_id', { length: 36 })
       .notNull()

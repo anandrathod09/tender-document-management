@@ -399,9 +399,20 @@ async function ensureEngineer(orgId: string): Promise<string | null> {
           designation: 'Store officer',
           phone: '9800000000',
           engineerId: engineer.id,
-          assets: [
-            { itemName: 'Delivered item 1', serialNumber: 'DEMO-0001', warrantyMonths: 12 },
-            { itemName: 'Delivered item 2', serialNumber: 'DEMO-0002', warrantyMonths: 12 },
+          items: [
+            {
+              itemName: 'Desktop computer\ni5, 16GB RAM, 512GB SSD, 22 inch monitor',
+              serialType: 'split',
+              warrantyMonths: 36,
+              quantity: 3,
+              units: [{ monitorSerial: 'DEMO-MON-01', cpuSerial: 'DEMO-CPU-01' }],
+            },
+            {
+              itemName: 'Laser printer',
+              warrantyMonths: 12,
+              quantity: 2,
+              units: [{ serialNumber: 'DEMO-0001' }, { serialNumber: 'DEMO-0002' }],
+            },
           ],
         },
       ],

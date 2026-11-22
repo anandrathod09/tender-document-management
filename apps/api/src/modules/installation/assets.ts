@@ -18,6 +18,11 @@ import {
 import { addDays, todayIn } from '../../lib/dates'
 import type { TenantAuth } from '../../types/express'
 import { visibilityScope } from '../tenders/service'
+import { ownConsigneesOnly } from './service'
+
+/** Engineers see the units on their own consignees only. */
+const ownScope = (auth: TenantAuth) =>
+  ownConsigneesOnly(auth) ? eq(installationConsignees.engineerId, auth.user.id) : undefined
 
 type Query = z.output<typeof assetListQuerySchema>
 
@@ -83,6 +88,7 @@ function baseQuery(auth: TenantAuth, q: Partial<Query>, today: string) {
   const where = and(
     orgWhere(installedAssets, auth.org.id),
     visibilityScope(auth),
+    ownScope(auth),
     q.tenderId ? eq(installedAssets.tenderId, q.tenderId) : undefined,
     q.engineerId ? eq(installationConsignees.engineerId, q.engineerId) : undefined,
     q.installStatus ? eq(installedAssets.installStatus, q.installStatus) : undefined,
@@ -96,6 +102,7 @@ function baseQuery(auth: TenantAuth, q: Partial<Query>, today: string) {
           like(installationReports.customerName, term),
           like(installationConsignees.name, term),
           like(tenders.referenceNo, term),
+          like(users.name, term),
         )
       : undefined,
   )
@@ -161,6 +168,7 @@ export async function listAssets(auth: TenantAuth, query: Query): Promise<AssetP
     .innerJoin(installationConsignees, eq(installationConsignees.id, installedAssets.consigneeId))
     .innerJoin(installationReports, eq(installationReports.id, installationConsignees.reportId))
     .innerJoin(tenders, eq(tenders.id, installedAssets.tenderId))
+    .leftJoin(users, eq(users.id, installationConsignees.engineerId))
     .where(where)
   const rows = await selectAssets()
     .where(where)
@@ -207,6 +215,7 @@ export async function countEndingSoon(auth: TenantAuth): Promise<number> {
       and(
         orgWhere(installedAssets, auth.org.id),
         visibilityScope(auth),
+        ownScope(auth),
         sql`(${warrantyEnd}) BETWEEN ${today} AND ${addDays(today, 90)}`,
       ),
     )

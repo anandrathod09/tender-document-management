@@ -18,6 +18,7 @@ import AssignPanel from './AssignPanel.vue'
 import CompanyPanel from './CompanyPanel.vue'
 import CompliancePanel from './CompliancePanel.vue'
 import DocumentsPanel from './DocumentsPanel.vue'
+import InstallationReportView from '@/features/installation/InstallationReportView.vue'
 import InstallationPanel from './InstallationPanel.vue'
 import MovePanel from './MovePanel.vue'
 
@@ -29,6 +30,16 @@ const route = useRoute()
 const auth = useAuthStore()
 const workflow = useWorkflowStore()
 const id = route.params.id as string
+
+/**
+ * Engineers get the old TMS engineer page: the tender overview and documents,
+ * then their own consignees' installation report, full width.
+ */
+const engineerView =
+  auth.can(PERMISSIONS.INSTALLATION_OWN) &&
+  !auth.can(PERMISSIONS.INSTALLATION_MANAGE) &&
+  !auth.can(PERMISSIONS.TENDER_VIEW_ALL) &&
+  !auth.can(PERMISSIONS.TENDER_MOVE_STAGE)
 
 const tender = ref<TenderDetail | null>(null)
 const loadError = ref('')
@@ -99,6 +110,10 @@ const deadlineTone = (date: string) => {
   if (tone === 'normal') return 'text-green-600'
   return 'text-orange-600'
 }
+
+const afterWin = computed(
+  () => !!tender.value && ['won', 'execution', 'closed'].includes(tender.value.stage.type),
+)
 
 const formatChange = (v: string | number | null | undefined, field: string) => {
   if (v === null || v === undefined || v === '') return 'empty'
@@ -221,7 +236,7 @@ const heading = 'text-sm font-semibold tracking-wider text-gray-700 uppercase da
 
       <div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
         <!-- Left: overview and documents -->
-        <div class="min-w-0 space-y-6 xl:col-span-2">
+        <div :class="['min-w-0 space-y-6', engineerView ? 'xl:col-span-3' : 'xl:col-span-2']">
           <UiCard title="Tender Overview">
             <div class="space-y-6">
               <section class="space-y-4">
@@ -267,11 +282,17 @@ const heading = 'text-sm font-semibold tracking-wider text-gray-700 uppercase da
           </UiCard>
 
           <DocumentsPanel :tender-id="tender.id" @changed="tenderDocs = $event" />
-          <CompliancePanel :tender="tender" :companies="companies" :tender-docs="tenderDocs" />
+          <CompliancePanel
+            v-if="!engineerView"
+            :tender="tender"
+            :companies="companies"
+            :tender-docs="tenderDocs"
+          />
+          <InstallationReportView v-if="afterWin" :key="tender.stage.id" :tender="tender" />
         </div>
 
         <!-- Right: who has it, where it is, what happened -->
-        <div class="min-w-0 space-y-6">
+        <div v-if="!engineerView" class="min-w-0 space-y-6">
           <AssignPanel
             :tender="tender"
             :can-assign="auth.can(PERMISSIONS.TENDER_ASSIGN)"
@@ -282,10 +303,7 @@ const heading = 'text-sm font-semibold tracking-wider text-gray-700 uppercase da
             :tender="tender"
             @moved="onChanged"
           />
-          <InstallationPanel
-            v-if="['won', 'execution', 'closed'].includes(tender.stage.type)"
-            :tender="tender"
-          />
+          <InstallationPanel v-if="afterWin" :tender="tender" />
           <CompanyPanel
             :tender="tender"
             :companies="companies"

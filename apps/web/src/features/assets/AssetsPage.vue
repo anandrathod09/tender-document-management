@@ -26,11 +26,17 @@ const auth = useAuthStore()
 const router = useRouter()
 const canExport = auth.can(PERMISSIONS.REPORT_EXPORT)
 const canTicket = auth.can(PERMISSIONS.TICKET_MANAGE)
+// Engineers only see their own units, so the engineer filter is for admins and viewers.
+const canFilterEngineer = !(
+  auth.can(PERMISSIONS.INSTALLATION_OWN) && !auth.can(PERMISSIONS.INSTALLATION_MANAGE)
+)
 
 const page = ref<AssetPage | null>(null)
 const q = ref('')
 const warranty = ref<WarrantyStatus | ''>('')
 const installStatus = ref('')
+const engineerId = ref('')
+const engineers = ref<{ id: string; name: string }[]>([])
 const pageNo = ref(1)
 const pageSize = ref(20)
 const loading = ref(false)
@@ -53,6 +59,7 @@ async function load() {
     if (q.value.trim()) params.q = q.value.trim()
     if (warranty.value) params.warranty = warranty.value
     if (installStatus.value) params.installStatus = installStatus.value
+    if (engineerId.value) params.engineerId = engineerId.value
     page.value = (await api.get<AssetPage>('/assets', { params })).data
   } catch (err) {
     error.value = errorMessage(err)
@@ -60,7 +67,14 @@ async function load() {
     loading.value = false
   }
 }
-onMounted(load)
+onMounted(() => {
+  void load()
+  if (canFilterEngineer)
+    api
+      .get<{ id: string; name: string }[]>('/assets/engineers')
+      .then((r) => (engineers.value = r.data))
+      .catch(() => undefined)
+})
 
 let timer: ReturnType<typeof setTimeout> | undefined
 watch(q, () => {
@@ -70,7 +84,7 @@ watch(q, () => {
     void load()
   }, 350)
 })
-watch([warranty, installStatus], () => {
+watch([warranty, installStatus, engineerId], () => {
   pageNo.value = 1
   void load()
 })
@@ -117,7 +131,7 @@ const daysText = (a: AssetListItem) =>
           <input
             v-model="q"
             type="search"
-            placeholder="Search serial, item, customer..."
+            placeholder="Search customer, item, serial, engineer..."
             class="form-field h-9! py-1! pl-9! text-sm!"
           />
         </label>
@@ -141,6 +155,17 @@ const daysText = (a: AssetListItem) =>
             { value: 'installed', label: 'Installed' },
             { value: 'not_installed', label: 'Not installed' },
             { value: 'pending', label: 'Pending' },
+          ]"
+        />
+        <UiSelect
+          v-if="canFilterEngineer && engineers.length"
+          v-model="engineerId"
+          aria-label="Engineer"
+          size="sm"
+          fit
+          :options="[
+            { value: '', label: 'All Engineers' },
+            ...engineers.map((e) => ({ value: e.id, label: e.name })),
           ]"
         />
         <IconButton

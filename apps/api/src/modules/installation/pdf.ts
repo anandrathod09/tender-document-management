@@ -194,88 +194,106 @@ function drawConsignee(
   row([['FAX No', c.fax ?? '', 1]])
   y -= 10
 
-  // Unit table. Monitor/CPU columns only when this consignee uses them (as in the old report).
-  const split = c.assets.some((a) => a.monitorSerial || a.cpuSerial)
-  const cols: { title: string; w: number; value: (i: number) => string }[] = [
-    { title: 'SR.NO', w: 0.06, value: (i) => String(i + 1) },
-    {
-      title: 'ITEM NAME & CONFIG',
-      w: split ? 0.34 : 0.44,
-      value: (i) => [c.assets[i]!.itemName, c.assets[i]!.makeModel].filter(Boolean).join(' / '),
-    },
-    ...(split
-      ? [
-          {
-            title: 'MONITOR SERIAL NO',
-            w: 0.17,
-            value: (i: number) => c.assets[i]!.monitorSerial ?? '',
-          },
-          {
-            title: 'CPU SERIAL NO',
-            w: 0.17,
-            value: (i: number) => c.assets[i]!.cpuSerial ?? c.assets[i]!.serialNumber ?? '',
-          },
-        ]
-      : [
-          {
-            title: 'SERIAL NUMBER',
-            w: 0.24,
-            value: (i: number) => c.assets[i]!.serialNumber ?? '',
-          },
-        ]),
-    {
-      title: 'INSTALLED (Y/N)',
-      w: 0.1,
-      value: (i) =>
-        ({ installed: 'Y', not_installed: 'N', pending: '' })[c.assets[i]!.installStatus],
-    },
-    { title: 'REMARK', w: split ? 0.16 : 0.16, value: (i) => c.assets[i]!.remarks ?? '' },
-  ]
+  // Unit table, as in the old report: one SR.NO per report template with its item name
+  // written once down all its rows. Monitor/CPU columns appear when any template uses
+  // them; a common serial then spans both.
+  const anySplit = c.items.some((i) => i.serialType === 'split')
+  const COL = { sr: 0.06, item: 0.3, serial: 0.34, installed: 0.1, remark: 0.2 }
+  const INSTALLED = { installed: 'Y', not_installed: 'N', pending: '' } as const
 
   const tableHeader = () => {
+    const heads: [string, number][] = [
+      ['SR.NO', COL.sr],
+      ['ITEM NAME & CONFIG', COL.item],
+      ...((anySplit
+        ? [
+            ['MONITOR SERIAL NO', COL.serial / 2],
+            ['CPU SERIAL NO', COL.serial / 2],
+          ]
+        : [['SERIAL NUMBER', COL.serial]]) as [string, number][]),
+      ['INSTALLED (Y/N)', COL.installed],
+      ['REMARK', COL.remark],
+    ]
     let x = M
-    for (const col of cols) {
+    for (const [title, w] of heads) {
       page.drawRectangle({
         x,
         y: y - 20,
-        width: col.w * W,
+        width: w * W,
         height: 20,
         color: SHADE,
         borderColor: GRID,
         borderWidth: 0.5,
       })
-      page.drawText(pdfSafe(col.title), { x: x + 4, y: y - 13, size: 7.5, font: f.bold })
-      x += col.w * W
+      page.drawText(pdfSafe(title), { x: x + 4, y: y - 13, size: 7.5, font: f.bold })
+      x += w * W
     }
     y -= 20
   }
+  const cellBox = (x: number, w: number, top: number, h: number, lines: string[]) => {
+    page.drawRectangle({ x, y: top - h, width: w, height: h, borderColor: GRID, borderWidth: 0.5 })
+    lines
+      .slice(0, Math.max(1, Math.floor((h - 4) / 10)))
+      .forEach((l, li) =>
+        page.drawText(l, { x: x + 4, y: top - 11 - li * 10, size: 8, font: f.regular }),
+      )
+  }
+
   const SIGN_H = 70
   tableHeader()
-  c.assets.forEach((_, i) => {
-    const lines = cols.map((col) => wrap(col.value(i) || ' ', f.regular, 8, col.w * W - 8))
-    const h = Math.max(...lines.map((l) => l.length)) * 10 + 8
-    if (y - h < M + 20) {
-      header()
-      tableHeader()
-    }
-    let x = M
-    cols.forEach((col, ci) => {
-      page.drawRectangle({
-        x,
-        y: y - h,
-        width: col.w * W,
-        height: h,
-        borderColor: GRID,
-        borderWidth: 0.5,
-      })
-      lines[ci]!.forEach((l, li) =>
-        page.drawText(l, { x: x + 4, y: y - 11 - li * 10, size: 8, font: f.regular }),
-      )
-      x += col.w * W
+  c.items.forEach((item, k) => {
+    const split = item.serialType === 'split'
+    const rowCount = Math.max(item.quantity, item.units.length, 1)
+    const itemLines = wrap(item.itemName || ' ', f.regular, 8, COL.item * W - 8)
+    const rows = Array.from({ length: rowCount }, (_, r) => {
+      const u = item.units[r]
+      const serials = split
+        ? [u?.monitorSerial ?? '', u?.cpuSerial ?? '']
+        : [u?.serialNumber ?? u?.monitorSerial ?? u?.cpuSerial ?? '']
+      const serialW = split || !anySplit ? COL.serial / serials.length : COL.serial
+      const lines = [
+        ...serials.map((v) => wrap(v || ' ', f.regular, 8, serialW * W - 8)),
+        wrap(u ? INSTALLED[u.installStatus] : ' ', f.regular, 8, COL.installed * W - 8),
+        wrap(u?.remarks || ' ', f.regular, 8, COL.remark * W - 8),
+      ]
+      return { serials, serialW, lines, h: Math.max(...lines.map((l) => l.length)) * 10 + 8 }
     })
-    y -= h
+    // Tall item descriptions make the template's last row taller.
+    const needed = itemLines.length * 10 + 8
+    const total = rows.reduce((n, r) => n + r.h, 0)
+    if (total < needed) rows[rows.length - 1]!.h += needed - total
+
+    let groupTop = y
+    let lineFrom = 0
+    const closeGroup = () => {
+      const h = groupTop - y
+      if (h <= 0) return
+      cellBox(M, COL.sr * W, groupTop, h, [String(k + 1)])
+      const fit = Math.max(1, Math.floor((h - 4) / 10))
+      cellBox(M + COL.sr * W, COL.item * W, groupTop, h, itemLines.slice(lineFrom, lineFrom + fit))
+      lineFrom += fit
+    }
+    for (const r of rows) {
+      if (y - r.h < M + 20) {
+        closeGroup()
+        header()
+        tableHeader()
+        groupTop = y
+        if (lineFrom >= itemLines.length) lineFrom = 0
+      }
+      let x = M + (COL.sr + COL.item) * W
+      r.serials.forEach((_, si) => {
+        cellBox(x, r.serialW * W, y, r.h, r.lines[si]!)
+        x += r.serialW * W
+      })
+      cellBox(x, COL.installed * W, y, r.h, r.lines[r.serials.length]!)
+      x += COL.installed * W
+      cellBox(x, COL.remark * W, y, r.h, r.lines[r.serials.length + 1]!)
+      y -= r.h
+    }
+    closeGroup()
   })
-  if (!c.assets.length) {
+  if (!c.items.length) {
     page.drawText('No units recorded yet.', { x: M + 4, y: y - 14, size: 8, font: f.regular })
     y -= 20
   }

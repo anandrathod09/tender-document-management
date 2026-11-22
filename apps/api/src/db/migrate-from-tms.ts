@@ -27,6 +27,7 @@ import { db, pool } from './client'
 import {
   biddingCompanies,
   installationConsignees,
+  installationItems,
   installationReports,
   installedAssets,
   organizations,
@@ -64,8 +65,20 @@ export interface MigrationReport {
   tenders: number
   byStage: Record<string, number>
   historyEntries: number
-  installation: { reports: number; consignees: number; units: number }
-  files: { library: number; tenderDocuments: number; companyImages: number; missing: string[] }
+  installation: {
+    reports: number
+    consignees: number
+    templates: number
+    units: number
+    emptyRows: number
+  }
+  files: {
+    library: number
+    tenderDocuments: number
+    consigneeDocuments: number
+    companyImages: number
+    missing: string[]
+  }
   warnings: string[]
 }
 
@@ -215,8 +228,8 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
     tenders: 0,
     byStage: {},
     historyEntries: 0,
-    installation: { reports: 0, consignees: 0, units: 0 },
-    files: { library: 0, tenderDocuments: 0, companyImages: 0, missing: [] },
+    installation: { reports: 0, consignees: 0, templates: 0, units: 0, emptyRows: 0 },
+    files: { library: 0, tenderDocuments: 0, consigneeDocuments: 0, companyImages: 0, missing: [] },
     warnings: [],
   }
 
@@ -665,6 +678,8 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
           itemName?: string
           warrantyYears?: number
           warrantyMonths?: number
+          quantity?: number
+          visibleFields?: Record<string, boolean>
           itemGroups?: { fieldValues?: Record<string, string> }[]
         }
         type OldConsignee = {
@@ -696,26 +711,67 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
             sortOrder: ci,
           })
           report.installation.consignees++
-          let order = 0
-          for (const card of c.reportCards ?? []) {
+          for (const [ki, card] of (c.reportCards ?? []).entries()) {
+            // One old "Report Template" = one template here, with its own serial type.
+            const groups = card.itemGroups ?? []
+            const vf = card.visibleFields ?? {}
+            const split =
+              vf.monitorSerialNumber === true ||
+              vf.cpuSerialNumber === true ||
+              groups.some(
+                (g) => g.fieldValues?.monitorSerialNumber || g.fieldValues?.cpuSerialNumber,
+              )
+            const itemId = crypto.randomUUID()
+            const itemName = str(card.itemName, 500) ?? str(card.title, 500) ?? 'Item'
             const warranty = num(card.warrantyYears) * 12 + num(card.warrantyMonths)
-            for (const g of card.itemGroups ?? []) {
+            await tx.insert(installationItems).values({
+              id: itemId,
+              organizationId: orgId,
+              consigneeId,
+              itemName,
+              serialType: split ? 'split' : 'common',
+              warrantyMonths: warranty,
+              // The old quantity is kept, so empty rows still show (and print) as rows to fill.
+              quantity: Math.max(1, Math.min(500, num(card.quantity) || groups.length)),
+              sortOrder: ki,
+            })
+            report.installation.templates++
+            let order = 0
+            for (const g of groups) {
               const fv = g.fieldValues ?? {}
               const installed = String(fv.installationStatus ?? '').toLowerCase()
+              const serialNumber = str(fv.serialNumberCommon, 100)
+              const monitorSerial = str(fv.monitorSerialNumber, 100)
+              const cpuSerial = str(fv.cpuSerialNumber, 100)
+              const remarks = str(fv.remarks, 500)
+              const makeModel = str(fv.makeAndModel, 200)
+              // Rows with nothing filled in were placeholders: not imported as units.
+              if (
+                !serialNumber &&
+                !monitorSerial &&
+                !cpuSerial &&
+                !remarks &&
+                !makeModel &&
+                installed !== 'yes'
+              ) {
+                report.installation.emptyRows++
+                continue
+              }
               const installStatus: InstallStatus =
                 installed === 'yes' ? 'installed' : installed === 'no' ? 'not_installed' : 'pending'
               await tx.insert(installedAssets).values({
                 organizationId: orgId,
                 consigneeId,
+                itemId,
                 tenderId,
-                itemName: str(card.itemName ?? card.title, 500) ?? 'Item',
-                makeModel: str(fv.makeAndModel, 200),
-                serialNumber: str(fv.serialNumberCommon, 100),
-                monitorSerial: str(fv.monitorSerialNumber, 100),
-                cpuSerial: str(fv.cpuSerialNumber, 100),
+                itemName,
+                makeModel,
+                serialNumber,
+                monitorSerial,
+                cpuSerial,
                 installStatus,
                 warrantyMonths: warranty,
-                remarks: str(fv.remarks, 500),
+                remarks,
                 sortOrder: order++,
               })
               report.installation.units++
@@ -727,15 +783,15 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
               report.files.missing.push(`Consignee document ${d.fileName ?? '?'} (${c.name ?? ''})`)
               continue
             }
-            report.files.tenderDocuments++
+            report.files.consigneeDocuments++
             if (!opts.dryRun) {
               await storeFile(tx, {
                 organizationId: orgId,
-                kind: 'tender_document',
+                kind: 'consignee_document',
                 bytes: await readFile(path),
                 originalName: d.fileName ?? basename(path),
-                title: `${str(c.name, 80) ?? 'Consignee'}: ${d.fileName ?? basename(path)}`,
                 tenderId,
+                consigneeId,
               })
             }
           }
@@ -813,8 +869,8 @@ export function formatReport(r: MigrationReport): string {
       .sort((a, b) => b[1] - a[1])
       .map(([stage, n]) => `  ${stage}: ${n}`),
     `Stage history entries: ${r.historyEntries}`,
-    `Installation reports: ${r.installation.reports} (${r.installation.consignees} consignees, ${r.installation.units} units)`,
-    `Files: ${r.files.library} library, ${r.files.tenderDocuments} tender documents, ${r.files.companyImages} company images${r.dryRun ? ' (checked, not copied)' : ''}`,
+    `Installation reports: ${r.installation.reports} (${r.installation.consignees} consignees, ${r.installation.templates} report templates, ${r.installation.units} units; ${r.installation.emptyRows} empty rows skipped)`,
+    `Files: ${r.files.library} library, ${r.files.tenderDocuments} tender documents, ${r.files.consigneeDocuments} consignee documents, ${r.files.companyImages} company images${r.dryRun ? ' (checked, not copied)' : ''}`,
   ]
   if (r.files.missing.length)
     lines.push(

@@ -103,6 +103,26 @@ async function buildSourceDb() {
             },
           ],
         },
+        {
+          // Monitor/CPU template; the two rows left empty in the old system are placeholders.
+          title: 'Report Template 2',
+          itemName: 'Desktop i7\nWith 22 inch monitor',
+          quantity: 3,
+          visibleFields: { monitorSerialNumber: true, cpuSerialNumber: true },
+          itemGroups: [
+            {
+              fieldValues: {
+                monitorSerialNumber: 'MON-1',
+                cpuSerialNumber: 'CPU-1',
+                installationStatus: 'yes',
+              },
+            },
+            {
+              fieldValues: { monitorSerialNumber: '', cpuSerialNumber: '', installationStatus: '' },
+            },
+            { fieldValues: {} },
+          ],
+        },
       ],
     },
   ]
@@ -140,7 +160,13 @@ describe('migration from the original TMS', () => {
 
   it('moves users, tenders, history and installation data, and old passwords keep working', async () => {
     const r = await run()
-    expect(r.installation).toEqual({ reports: 1, consignees: 1, units: 2 })
+    expect(r.installation).toEqual({
+      reports: 1,
+      consignees: 1,
+      templates: 2,
+      units: 3,
+      emptyRows: 2,
+    })
     expect(r.warnings.join(' ')).toContain('buyer-side')
 
     const login = await request(app)
@@ -208,12 +234,19 @@ describe('migration from the original TMS', () => {
       engineer: { id: ids.engineer },
       callAlignedDate: '2026-04-01',
     })
-    expect(
-      report.consignees[0]!.assets.map((a) => [a.serialNumber, a.installStatus, a.warrantyMonths]),
-    ).toEqual([
+    const [laptops, desktops] = report.consignees[0]!.items
+    expect(laptops).toMatchObject({ itemName: 'Laptop i5 16GB', serialType: 'common', quantity: 2 })
+    expect(laptops!.units.map((a) => [a.serialNumber, a.installStatus, a.warrantyMonths])).toEqual([
       ['LT-1', 'installed', 36],
       ['LT-2', 'not_installed', 36],
     ])
+    // Its own serial type; the quantity is kept although the empty rows were not imported.
+    expect(desktops).toMatchObject({
+      itemName: 'Desktop i7\nWith 22 inch monitor',
+      serialType: 'split',
+      quantity: 3,
+    })
+    expect(desktops!.units.map((a) => [a.monitorSerial, a.cpuSerial])).toEqual([['MON-1', 'CPU-1']])
 
     // The engineer never set a password: invited, waiting for a new invitation.
     const users = await request(app).get('/api/users').set('Host', HOST).set(bearer(token))

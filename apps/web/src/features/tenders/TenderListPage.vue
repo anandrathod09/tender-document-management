@@ -166,6 +166,13 @@ const sinceLabel = computed(() => {
   return ''
 })
 
+// After the win, the old "Engineer Tenders" columns: each consignee and its engineer.
+const showInstallation = computed(
+  () =>
+    ['won', 'execution', 'closed'].includes(stage.value?.type ?? '') ||
+    (page.value?.items ?? []).some((t) => t.consignees.length),
+)
+
 const columns = computed<TableColumn[]>(() => [
   {
     key: 'referenceNo',
@@ -174,6 +181,12 @@ const columns = computed<TableColumn[]>(() => [
     sticky: true,
     class: 'min-w-40 max-w-44',
   },
+  ...(showInstallation.value
+    ? ([
+        { key: 'consignees', label: 'Consignees', class: 'min-w-40' },
+        { key: 'engineers', label: 'Assigned Engineers', class: 'min-w-52' },
+      ] as TableColumn[])
+    : []),
   { key: 'deadline', label: 'Deadline', sort: true },
   { key: 'sheetType', label: 'Type', sort: true },
   ...(sinceLabel.value
@@ -312,7 +325,9 @@ onBeforeUnmount(() => {
           <input
             v-model="q"
             type="search"
-            placeholder="Search tenders..."
+            :placeholder="
+              showInstallation ? 'Search by tender, consignee, engineer...' : 'Search tenders...'
+            "
             class="form-field h-9! py-1! pl-9! text-sm!"
           />
         </label>
@@ -497,6 +512,51 @@ onBeforeUnmount(() => {
             </a>
           </div>
           <span v-else class="text-xs">Not Assigned</span>
+        </template>
+
+        <template #cell-consignees="{ row }">
+          <ul v-if="row.consignees.length" class="space-y-3 text-xs">
+            <li
+              v-for="c in row.consignees"
+              :key="c.id"
+              class="border-b border-gray-100 pb-3 last:border-0 last:pb-0 dark:border-gray-800"
+            >
+              <span class="block font-medium">{{ c.name }}</span>
+              <span v-if="c.designation" class="block text-gray-500 dark:text-gray-400"
+                >({{ c.designation }})</span
+              >
+            </li>
+          </ul>
+          <span v-else class="text-xs text-gray-400">No consignees assigned</span>
+        </template>
+
+        <template #cell-engineers="{ row }">
+          <ul v-if="row.consignees.length" class="space-y-3 text-xs">
+            <li
+              v-for="c in row.consignees"
+              :key="c.id"
+              class="flex flex-col gap-1 border-b border-gray-100 pb-3 last:border-0 last:pb-0 dark:border-gray-800"
+            >
+              <span class="font-medium">{{ c.engineer?.name ?? 'Not Assigned' }}</span>
+              <a
+                v-if="c.engineer?.email"
+                :href="`mailto:${c.engineer.email}`"
+                class="flex items-center gap-1 text-gray-600 hover:text-blue-600 hover:underline dark:text-gray-400"
+              >
+                <Mail class="size-4 shrink-0" aria-hidden="true" />
+                <span class="truncate">{{ c.engineer.email }}</span>
+              </a>
+              <a
+                v-if="c.engineer?.phone"
+                :href="`tel:${c.engineer.phone}`"
+                class="flex items-center gap-1 text-gray-600 hover:text-green-600 hover:underline dark:text-gray-400"
+              >
+                <Phone class="size-4 shrink-0" aria-hidden="true" />
+                {{ c.engineer.phone }}
+              </a>
+            </li>
+          </ul>
+          <span v-else class="text-xs text-gray-400">No consignees assigned</span>
         </template>
 
         <template #cell-assignedAt="{ row }">

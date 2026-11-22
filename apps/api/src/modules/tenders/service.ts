@@ -136,7 +136,64 @@ function toSummary(r: SummaryRow): TenderSummary {
     excelUpdatedAt: r.excelUpdatedAt ? r.excelUpdatedAt.toISOString() : null,
     reopenedAfterDeadline: r.deadlineMissedAt !== null,
     createdAt: r.createdAt.toISOString(),
+    consignees: [],
   }
+}
+
+/**
+ * Adds each tender's installation consignees and their engineers (the old
+ * "Engineer Tenders" columns). Engineers only see their own consignees.
+ */
+async function withConsignees(auth: TenantAuth, items: TenderSummary[]): Promise<TenderSummary[]> {
+  if (!items.length) return items
+  const engineers = alias(users, 'consignee_engineer')
+  const ownOnly =
+    !auth.permissions.has(PERMISSIONS.INSTALLATION_MANAGE) &&
+    auth.permissions.has(PERMISSIONS.INSTALLATION_OWN)
+  const rows = await db
+    .select({
+      tenderId: installationReports.tenderId,
+      id: installationConsignees.id,
+      name: installationConsignees.name,
+      designation: installationConsignees.designation,
+      engineerId: engineers.id,
+      engineerName: engineers.name,
+      engineerEmail: engineers.email,
+      engineerPhone: engineers.phone,
+    })
+    .from(installationConsignees)
+    .innerJoin(installationReports, eq(installationReports.id, installationConsignees.reportId))
+    .leftJoin(engineers, eq(engineers.id, installationConsignees.engineerId))
+    .where(
+      orgWhere(
+        installationConsignees,
+        auth.org.id,
+        inArray(
+          installationReports.tenderId,
+          items.map((t) => t.id),
+        ),
+        ownOnly ? eq(installationConsignees.engineerId, auth.user.id) : undefined,
+      ),
+    )
+    .orderBy(asc(installationConsignees.sortOrder))
+  for (const t of items) {
+    t.consignees = rows
+      .filter((r) => r.tenderId === t.id)
+      .map((r) => ({
+        id: r.id,
+        name: r.name,
+        designation: r.designation,
+        engineer: r.engineerId
+          ? {
+              id: r.engineerId,
+              name: r.engineerName ?? '',
+              email: r.engineerEmail ?? '',
+              phone: r.engineerPhone,
+            }
+          : null,
+      }))
+  }
+  return items
 }
 
 function selectSummaries(conn: DbOrTx) {
@@ -172,6 +229,28 @@ export function tenderListWhere(auth: TenantAuth, query: ListQuery): SQL {
           like(tenders.buyerOrganization, likeTerm(query.q)),
           like(tenders.sourceTenderId, likeTerm(query.q)),
           like(tenders.location, likeTerm(query.q)),
+          // A consignee or its engineer, as in the old Engineer Tenders search.
+          inArray(
+            tenders.id,
+            db
+              .select({ id: installationReports.tenderId })
+              .from(installationConsignees)
+              .innerJoin(
+                installationReports,
+                eq(installationReports.id, installationConsignees.reportId),
+              )
+              .leftJoin(users, eq(users.id, installationConsignees.engineerId))
+              .where(
+                orgWhere(
+                  installationConsignees,
+                  orgId,
+                  or(
+                    like(installationConsignees.name, likeTerm(query.q)),
+                    like(users.name, likeTerm(query.q)),
+                  ),
+                ),
+              ),
+          ),
         )
       : undefined,
   )
@@ -220,7 +299,7 @@ export async function listTenders(auth: TenantAuth, query: ListQuery): Promise<T
     .offset((query.page - 1) * query.pageSize)
 
   return {
-    items: rows.map(toSummary),
+    items: await withConsignees(auth, rows.map(toSummary)),
     total: totalRow?.n ?? 0,
     page: query.page,
     pageSize: query.pageSize,

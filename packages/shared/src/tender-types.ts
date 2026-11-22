@@ -61,6 +61,15 @@ export interface TenderSummary {
   /** It missed its deadline once and an admin brought it back, so the deadline rule no longer applies. */
   reopenedAfterDeadline: boolean
   createdAt: string
+  /** Installation consignees and their engineers (after the win; empty before). */
+  consignees: TenderConsigneeSummary[]
+}
+
+export interface TenderConsigneeSummary {
+  id: string
+  name: string
+  designation: string | null
+  engineer: TenderPerson | null
 }
 
 export interface TenderPerson {

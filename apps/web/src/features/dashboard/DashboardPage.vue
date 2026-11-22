@@ -26,6 +26,7 @@ import { useAuthStore } from '@/stores/auth'
 import { useWorkflowStore } from '@/stores/workflow'
 import { formatDate } from '@/utils/format'
 import { formatINRShort } from '@/utils/tenders'
+import EngineerDashboard from './EngineerDashboard.vue'
 
 /**
  * Dashboard of the original TMS: notices at the top, then a count card for
@@ -36,8 +37,15 @@ const workflow = useWorkflowStore()
 const router = useRouter()
 const data = ref<DashboardData | null>(null)
 const error = ref('')
+/** Engineers get their own dashboard, "My Assigned Installations", as in the old TMS. */
+const engineerView =
+  auth.can(PERMISSIONS.INSTALLATION_OWN) &&
+  !auth.can(PERMISSIONS.INSTALLATION_MANAGE) &&
+  !auth.can(PERMISSIONS.TENDER_VIEW_ALL) &&
+  !auth.can(PERMISSIONS.TENDER_MOVE_STAGE)
 
 onMounted(async () => {
+  if (engineerView) return
   workflow.load().catch(() => undefined)
   void workflow.refreshCounts().catch(() => undefined)
   try {
@@ -70,7 +78,8 @@ const canImport = auth.can(PERMISSIONS.TENDER_IMPORT)
 </script>
 
 <template>
-  <div>
+  <EngineerDashboard v-if="engineerView" />
+  <div v-else>
     <PageHeader title="Dashboard" :icon="LayoutDashboard" />
     <UiAlert v-if="error" class="mb-4">{{ error }}</UiAlert>
 

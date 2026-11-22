@@ -5,13 +5,22 @@ import { MAX_UPLOAD_MB, PERMISSIONS, type FileKind, type FileSummary } from '@td
 import { env } from '../../config/env'
 import { db, type DbOrTx } from '../../db/client'
 import { orgWhere } from '../../db/scope'
-import { files, organizations, plans, tenders, users, type StoredFile } from '../../db/schema'
+import {
+  files,
+  installationConsignees,
+  organizations,
+  plans,
+  users,
+  type StoredFile,
+} from '../../db/schema'
 import { writeAudit } from '../../lib/audit'
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors'
 import { detectFileType, IMAGE_MIMES } from '../../lib/file-types'
 import { logger } from '../../lib/logger'
 import { storage } from '../../lib/storage'
 import type { TenantAuth } from '../../types/express'
+import { ownConsigneesOnly } from '../installation/service'
+import { getVisibleTender } from '../tenders/service'
 
 export interface NewFile {
   organizationId: string
@@ -21,6 +30,7 @@ export interface NewFile {
   title?: string
   tenderId?: string | null
   companyId?: string | null
+  consigneeId?: string | null
   uploadedBy?: string | null
 }
 
@@ -88,6 +98,7 @@ export async function storeFile(conn: DbOrTx, f: NewFile): Promise<StoredFile> {
     sizeBytes: f.bytes.length,
     tenderId: f.tenderId ?? null,
     companyId: f.companyId ?? null,
+    consigneeId: f.consigneeId ?? null,
     uploadedBy: f.uploadedBy ?? null,
   }
   try {
@@ -111,20 +122,35 @@ export async function getFile(conn: DbOrTx, orgId: string, id: string): Promise<
 
 /**
  * Whether the user may see a file. Tender files follow the tender's
- * visibility (agents see only their tenders); library files and company
- * logos are visible to everyone in the client.
+ * visibility (agents and engineers see only their tenders); consignee
+ * documents also need the consignee to be the engineer's own; library files
+ * and company logos are visible to everyone in the client.
  */
 export async function assertCanAccess(auth: TenantAuth, file: StoredFile): Promise<void> {
-  if (file.kind === 'tender_document' || file.kind === 'compliance_pdf') {
-    if (auth.permissions.has(PERMISSIONS.TENDER_VIEW_ALL)) return
-    const [tender] = file.tenderId
+  const tenderFile =
+    file.kind === 'tender_document' ||
+    file.kind === 'compliance_pdf' ||
+    file.kind === 'consignee_document'
+  if (!tenderFile || auth.permissions.has(PERMISSIONS.TENDER_VIEW_ALL)) return
+  const hidden = () => notFound('FILE_NOT_FOUND', 'File not found')
+  if (!file.tenderId) throw hidden()
+  await getVisibleTender(db, auth, file.tenderId).catch(() => {
+    throw hidden()
+  })
+  if (file.kind === 'consignee_document' && ownConsigneesOnly(auth)) {
+    const [c] = file.consigneeId
       ? await db
-          .select({ agent: tenders.assignedAgentId })
-          .from(tenders)
-          .where(orgWhere(tenders, auth.org.id, eq(tenders.id, file.tenderId)))
-          .limit(1)
+          .select({ engineerId: installationConsignees.engineerId })
+          .from(installationConsignees)
+          .where(
+            orgWhere(
+              installationConsignees,
+              auth.org.id,
+              eq(installationConsignees.id, file.consigneeId),
+            ),
+          )
       : []
-    if (!tender || tender.agent !== auth.user.id) throw notFound('FILE_NOT_FOUND', 'File not found')
+    if (c?.engineerId !== auth.user.id) throw hidden()
   }
 }
 
@@ -175,9 +201,11 @@ export async function deleteFile(auth: TenantAuth, id: string, ip: string | null
   const allowed =
     file.kind === 'tender_document'
       ? file.uploadedBy === auth.user.id || auth.permissions.has(PERMISSIONS.TENDER_ASSIGN)
-      : file.kind === 'library'
-        ? auth.permissions.has(PERMISSIONS.COMPANY_MANAGE)
-        : false
+      : file.kind === 'consignee_document'
+        ? file.uploadedBy === auth.user.id || auth.permissions.has(PERMISSIONS.INSTALLATION_MANAGE)
+        : file.kind === 'library'
+          ? auth.permissions.has(PERMISSIONS.COMPANY_MANAGE)
+          : false
   if (!allowed) throw forbidden()
   await db.transaction(async (tx) => {
     await tx

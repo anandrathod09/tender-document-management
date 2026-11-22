@@ -16,6 +16,12 @@ export const PERMISSIONS = {
   SETTINGS_MANAGE: 'settings.manage',
   /** Fill in installation reports (consignees, serial numbers) for won tenders. */
   INSTALLATION_MANAGE: 'installation.manage',
+  /**
+   * Work on the consignees they are the engineer of: fill in serial numbers,
+   * installation status and remarks, set the engineer status, and attach documents.
+   * People with this permission can be chosen as a consignee's engineer.
+   */
+  INSTALLATION_OWN: 'installation.own',
   /** Handle client feedback and service tickets. */
   TICKET_MANAGE: 'ticket.manage',
   /**
@@ -52,7 +58,7 @@ export const DEFAULT_ROLES: { key: DefaultRoleKey; name: string; permissions: Pe
     permissions: [
       PERMISSIONS.TENDER_VIEW_ASSIGNED,
       PERMISSIONS.TENDER_DOCUMENTS,
-      PERMISSIONS.INSTALLATION_MANAGE,
+      PERMISSIONS.INSTALLATION_OWN,
       PERMISSIONS.TICKET_MANAGE,
       PERMISSIONS.ASSET_VIEW,
     ],

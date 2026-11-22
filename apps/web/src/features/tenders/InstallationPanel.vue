@@ -24,8 +24,13 @@ onMounted(async () => {
   }
 })
 
-const units = computed(() => report.value?.consignees.flatMap((c) => c.assets) ?? [])
-const installed = computed(() => units.value.filter((u) => u.installStatus === 'installed').length)
+const items = computed(() => report.value?.consignees.flatMap((c) => c.items) ?? [])
+const totalItems = computed(() =>
+  items.value.reduce((n, i) => n + Math.max(i.quantity, i.units.length), 0),
+)
+const installed = computed(
+  () => items.value.flatMap((i) => i.units).filter((u) => u.installStatus === 'installed').length,
+)
 </script>
 
 <template>
@@ -33,7 +38,7 @@ const installed = computed(() => units.value.filter((u) => u.installStatus === '
     <template v-if="loaded">
       <template v-if="report && report.consignees.length">
         <p class="text-theme-sm text-gray-700 dark:text-gray-300">
-          {{ installed }} of {{ units.length }} unit(s) installed across
+          {{ installed }} of {{ totalItems }} item(s) installed across
           {{ report.consignees.length }} consignee(s).
         </p>
         <ul class="mt-3 space-y-1.5">
