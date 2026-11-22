@@ -61,6 +61,8 @@ export interface TenderSummary {
   /** It missed its deadline once and an admin brought it back, so the deadline rule no longer applies. */
   reopenedAfterDeadline: boolean
   createdAt: string
+  /** The comment given when the tender moved into its current stage (e.g. completion notes). */
+  stageComment: string | null
   /** Installation consignees and their engineers (after the win; empty before). */
   consignees: TenderConsigneeSummary[]
 }

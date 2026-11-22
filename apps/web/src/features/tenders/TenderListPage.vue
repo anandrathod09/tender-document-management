@@ -163,8 +163,11 @@ const sinceLabel = computed(() => {
   const key = stage.value ? workflow.byId.get(stage.value.id)?.key : undefined
   if (key === 'watchlist') return `Added to ${stage.value!.label}`
   if (key === 'rejected') return 'Rejected On'
+  if (stage.value?.type === 'closed') return `${stage.value.label} On`
   return ''
 })
+// Closed stages (Completed) show the note given when the tender was closed, as in the old TMS.
+const showStageComment = computed(() => stage.value?.type === 'closed')
 
 // After the win, the old "Engineer Tenders" columns: each consignee and its engineer.
 const showInstallation = computed(
@@ -191,6 +194,15 @@ const columns = computed<TableColumn[]>(() => [
   { key: 'sheetType', label: 'Type', sort: true },
   ...(sinceLabel.value
     ? [{ key: 'stageChangedAt', label: sinceLabel.value, sort: true } as TableColumn]
+    : []),
+  ...(showStageComment.value
+    ? [
+        {
+          key: 'stageComment',
+          label: 'Completion Notes',
+          class: 'min-w-56 max-w-xs',
+        } as TableColumn,
+      ]
     : []),
   { key: 'title', label: 'Description', sort: true, class: 'min-w-72 max-w-md' },
   { key: 'buyerOrganization', label: 'Organization', sort: true, class: 'min-w-40 max-w-56' },
@@ -459,6 +471,17 @@ onBeforeUnmount(() => {
           <UiBadge :color="row.sheetType === 'gem' ? 'success' : 'info'">
             {{ row.sheetType === 'gem' ? 'GeM' : 'Non-GeM' }}
           </UiBadge>
+        </template>
+
+        <template #cell-stageComment="{ row }">
+          <p
+            v-if="row.stageComment"
+            class="line-clamp-3 text-xs whitespace-pre-line"
+            :title="row.stageComment"
+          >
+            {{ row.stageComment }}
+          </p>
+          <span v-else class="text-xs text-gray-400">—</span>
         </template>
 
         <template #cell-stageChangedAt="{ row }">

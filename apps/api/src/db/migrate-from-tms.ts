@@ -558,7 +558,18 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
         note('won', t.wonNotes, t.wonReviewedAt ?? t.wonAt, t.wonReviewedBy)
         note('lost', t.lostNotes, t.lostReviewedAt ?? t.lostAt, t.lostReviewedBy)
         note('rejected', t.rejectionComment, t.rejectedAt, t.rejectedBy)
-        note('completed', t.tenderCompletedNotes, t.engineerCompletionDate, null)
+        // Completion notes and the client's feedback both go on the move to Completed.
+        note(
+          'completed',
+          [
+            str(t.tenderCompletedNotes, 1500),
+            str(t.clientFeedback, 1500) && `Client feedback: ${str(t.clientFeedback, 1500)}`,
+          ]
+            .filter(Boolean)
+            .join('\n'),
+          t.engineerCompletionDate ?? t.feedbackDate,
+          null,
+        )
         entries.sort((a, b) => a.at.getTime() - b.at.getTime())
 
         const history: (typeof tenderStageHistory.$inferInsert)[] = [

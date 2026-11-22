@@ -136,8 +136,40 @@ function toSummary(r: SummaryRow): TenderSummary {
     excelUpdatedAt: r.excelUpdatedAt ? r.excelUpdatedAt.toISOString() : null,
     reopenedAfterDeadline: r.deadlineMissedAt !== null,
     createdAt: r.createdAt.toISOString(),
+    stageComment: null,
     consignees: [],
   }
+}
+
+/**
+ * Adds the comment of each tender's move into its current stage, shown on
+ * lists such as Completed ("Completion Notes", as in the old TMS).
+ */
+async function withStageComments(auth: TenantAuth, items: TenderSummary[]) {
+  if (!items.length) return items
+  const rows = await db
+    .select({
+      tenderId: tenderStageHistory.tenderId,
+      toStageId: tenderStageHistory.toStageId,
+      comment: tenderStageHistory.comment,
+    })
+    .from(tenderStageHistory)
+    .where(
+      orgWhere(
+        tenderStageHistory,
+        auth.org.id,
+        inArray(
+          tenderStageHistory.tenderId,
+          items.map((t) => t.id),
+        ),
+      ),
+    )
+    .orderBy(desc(tenderStageHistory.createdAt))
+  for (const t of items) {
+    t.stageComment =
+      rows.find((r) => r.tenderId === t.id && r.toStageId === t.stage.id)?.comment ?? null
+  }
+  return items
 }
 
 /**
@@ -299,7 +331,7 @@ export async function listTenders(auth: TenantAuth, query: ListQuery): Promise<T
     .offset((query.page - 1) * query.pageSize)
 
   return {
-    items: await withConsignees(auth, rows.map(toSummary)),
+    items: await withStageComments(auth, await withConsignees(auth, rows.map(toSummary))),
     total: totalRow?.n ?? 0,
     page: query.page,
     pageSize: query.pageSize,

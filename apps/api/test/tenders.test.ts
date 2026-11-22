@@ -125,6 +125,12 @@ describe('tenders and stages', () => {
       to: { label: 'Not fit' },
       comment: 'Needs ISO 9001',
     })
+    // Lists show the note given when the tender entered its stage (e.g. completion notes).
+    const notFit = await request(app)
+      .get(`/api/tenders?stageId=${stages['not-fit']!.id}`)
+      .set('Host', ACME)
+      .set(bearer(adminToken))
+    expect(notFit.body.items[0].stageComment).toBe('Needs ISO 9001')
 
     await request(app)
       .patch(`/api/workflow/stages/${stages.watchlist!.id}`)
