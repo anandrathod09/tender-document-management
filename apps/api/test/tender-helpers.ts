@@ -74,7 +74,13 @@ export async function addUser(host: string, adminToken: string, roleKey: string,
     .post('/api/users')
     .set('Host', host)
     .set(bearer(adminToken))
-    .send({ name: email.split('@')[0], email, roleId: role.id })
+    .send({
+      name: email.split('@')[0],
+      email,
+      // Engineers need a phone number.
+      phone: roleKey === 'engineer' ? '9800000000' : undefined,
+      roleId: role.id,
+    })
   const accepted = await request(app)
     .post('/api/auth/accept-invite')
     .set('Host', host)

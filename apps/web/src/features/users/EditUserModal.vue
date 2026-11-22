@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { RoleSummary, UserSummary } from '@tdm/shared'
+import { isEngineerRole } from '@tdm/shared/permissions'
 import UiAlert from '@/components/ui/UiAlert.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiInput from '@/components/ui/UiInput.vue'
@@ -19,6 +20,10 @@ const error = ref('')
 const saving = ref(false)
 
 const roleOptions = computed(() => props.roles.map((r) => ({ value: r.id, label: r.name })))
+/** Engineers need a phone number: admins call them about installations. */
+const phoneRequired = computed(() =>
+  isEngineerRole(props.roles.find((r) => r.id === roleId.value)?.permissions ?? []),
+)
 
 watch(
   () => props.user,
@@ -75,6 +80,12 @@ function submit() {
         type="tel"
         placeholder="Enter 10-digit number"
         :error="errors.phone"
+        :required="phoneRequired"
+        :hint="
+          phoneRequired
+            ? 'Required for engineers: shown to admins on installations so they can call them.'
+            : undefined
+        "
       />
       <UiSelect
         v-model="roleId"

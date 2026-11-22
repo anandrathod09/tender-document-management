@@ -1,25 +1,24 @@
 <script setup lang="ts">
-import { FileImage, FileText, Upload } from 'lucide-vue-next'
+import { Paperclip } from 'lucide-vue-next'
 import { ref } from 'vue'
 import type { ConsigneeDocument } from '@tdm/shared'
 import { PERMISSIONS } from '@tdm/shared/permissions'
 import { ACTION_ICONS } from '@/components/ui/actions'
 import IconButton from '@/components/ui/IconButton.vue'
 import UiAlert from '@/components/ui/UiAlert.vue'
-import UiCard from '@/components/ui/UiCard.vue'
 import { api, errorMessage } from '@/services/api'
 import { downloadFile, formatBytes, openFile } from '@/services/files'
 import { useAuthStore } from '@/stores/auth'
-import { formatDateTime } from '@/utils/format'
+import { formatDate } from '@/utils/format'
+import { SECTION_HEADING } from './installation-ui'
 
 /**
- * Installation certificates and site photos for one consignee (the old
- * "Uploaded Documents" card). PDF, JPG or PNG; several at once.
+ * A consignee's documents (signed installation certificate, site photos):
+ * PDF, JPG or PNG, several at once. Laid out like the tender's documents list.
  */
 const props = defineProps<{
   tenderId: string
   consigneeId: string
-  consigneeName: string
   documents: ConsigneeDocument[]
   canUpload: boolean
 }>()
@@ -60,7 +59,7 @@ async function upload(e: Event) {
 }
 
 async function remove(d: ConsigneeDocument) {
-  if (!confirm(`Delete “${d.originalName}”? This removes the file for everyone.`)) return
+  if (!confirm(`Delete “${d.originalName}”?`)) return
   try {
     await api.delete(`/files/${d.id}`)
     emit('changed')
@@ -73,18 +72,15 @@ const act = (fn: () => Promise<void>) => fn().catch((err) => (error.value = erro
 </script>
 
 <template>
-  <UiCard
-    v-if="documents.length || canUpload"
-    title="Uploaded Documents"
-    :subtitle="consigneeName"
-    accent="purple"
-  >
-    <template v-if="canUpload" #header>
+  <section v-if="documents.length || canUpload">
+    <div class="mb-2 flex items-center justify-between gap-3">
+      <h4 :class="SECTION_HEADING">Documents ({{ documents.length }})</h4>
       <label
-        class="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md bg-gray-200 px-3 text-sm text-gray-700 hover:bg-gray-300 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
+        v-if="canUpload"
+        class="inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-md bg-gray-200 px-3 text-xs text-gray-700 hover:bg-gray-300 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10"
       >
-        <Upload class="size-4" aria-hidden="true" />
-        {{ uploading ? 'Uploading…' : 'Upload Documents' }}
+        <Paperclip class="size-3.5" aria-hidden="true" />
+        {{ uploading ? 'Uploading…' : 'Add files' }}
         <input
           type="file"
           multiple
@@ -94,26 +90,17 @@ const act = (fn: () => Promise<void>) => fn().catch((err) => (error.value = erro
           @change="upload"
         />
       </label>
-    </template>
-    <UiAlert v-if="error" class="mb-3">{{ error }}</UiAlert>
-    <ul v-if="documents.length" class="grid gap-3">
-      <li
-        v-for="d in documents"
-        :key="d.id"
-        class="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-800"
-      >
-        <component
-          :is="d.mimeType.startsWith('image/') ? FileImage : FileText"
-          class="size-8 shrink-0 text-gray-500 dark:text-gray-400"
-          aria-hidden="true"
-        />
+    </div>
+    <UiAlert v-if="error" class="mb-2">{{ error }}</UiAlert>
+    <ul v-if="documents.length" class="divide-y divide-gray-100 dark:divide-gray-800">
+      <li v-for="d in documents" :key="d.id" class="flex items-center gap-3 py-2">
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-medium text-gray-900 dark:text-gray-100">
+          <p class="truncate text-theme-sm font-medium text-gray-800 dark:text-white/90">
             {{ d.originalName }}
           </p>
-          <p class="text-xs text-gray-500 dark:text-gray-400">
-            {{ formatBytes(d.sizeBytes) }} · Uploaded {{ formatDateTime(d.createdAt) }}
-            <template v-if="d.uploadedBy"> · By {{ d.uploadedBy.name }}</template>
+          <p class="text-theme-xs text-gray-500 dark:text-gray-400">
+            {{ formatBytes(d.sizeBytes) }} · {{ d.uploadedBy?.name ?? 'System' }} ·
+            {{ formatDate(d.createdAt) }}
           </p>
         </div>
         <IconButton
@@ -136,7 +123,7 @@ const act = (fn: () => Promise<void>) => fn().catch((err) => (error.value = erro
       </li>
     </ul>
     <p v-else class="text-theme-sm text-gray-500 dark:text-gray-400">
-      Add the signed installation certificate or site photos. PDF, JPG or PNG.
+      Add the signed installation certificate or site photos (PDF, JPG or PNG).
     </p>
-  </UiCard>
+  </section>
 </template>

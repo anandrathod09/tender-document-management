@@ -2,7 +2,7 @@
 import { CircleCheck, Clock, Pause, Search, ShieldCheck, UserPlus, Users } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import type { RoleSummary, UserSummary, WorkspaceSettings } from '@tdm/shared'
-import { PERMISSIONS } from '@tdm/shared/permissions'
+import { isEngineerRole, PERMISSIONS } from '@tdm/shared/permissions'
 import { ACTION_ICONS } from '@/components/ui/actions'
 import CopyField from '@/components/ui/CopyField.vue'
 import DataTable from '@/components/ui/DataTable.vue'
@@ -27,6 +27,9 @@ import InviteUserModal from './InviteUserModal.vue'
 const auth = useAuthStore()
 const users = ref<UserSummary[]>([])
 const roles = ref<RoleSummary[]>([])
+/** Engineers without a phone number: admins cannot call them about installations. */
+const missingPhone = (u: UserSummary) =>
+  !u.phone && isEngineerRole(roles.value.find((r) => r.id === u.role.id)?.permissions ?? [])
 const loading = ref(true)
 const loadError = ref('')
 
@@ -378,6 +381,12 @@ async function confirmToggle() {
               </span>
               <span class="text-gray-500 dark:text-gray-400">{{ row.email }}</span>
               <span v-if="row.phone" class="mt-1 text-gray-400">{{ row.phone }}</span>
+              <span
+                v-else-if="missingPhone(row)"
+                class="mt-1 text-[#FC9A1D]"
+                title="Engineers need a phone number. Edit the user to add it."
+                >No phone number: add one</span
+              >
               <span
                 v-if="row.twoFactorEnabled"
                 class="mt-1 inline-flex items-center gap-1 text-[#7AA90D]"

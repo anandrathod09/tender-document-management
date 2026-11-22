@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto'
-import { and, asc, desc, eq, inArray, isNull } from 'drizzle-orm'
+import { and, asc, desc, eq, gt, inArray, isNull, ne } from 'drizzle-orm'
 import {
   consigneeWorkSchema,
   installationReportSchema,
@@ -21,6 +21,7 @@ import {
   installationItems,
   installationReports,
   installedAssets,
+  notifications,
   roles,
   tenders,
   users,
@@ -281,6 +282,46 @@ export async function listEngineers(orgId: string) {
   return rows
     .filter((r) => r.permissions.includes(PERMISSIONS.INSTALLATION_OWN))
     .map((r) => ({ id: r.id, name: r.name }))
+}
+
+/**
+ * Tells the people who manage installation reports (admins) about an
+ * engineer's work. With `quietMinutes`, a repeat within that time (several
+ * files uploaded one after another) adds no second notification.
+ */
+export async function notifyInstallationManagers(
+  tx: DbOrTx,
+  auth: TenantAuth,
+  n: { type: string; title: string; body: string; link: string },
+  quietMinutes = 0,
+) {
+  const managers = await tx
+    .select({ id: users.id, permissions: roles.permissions })
+    .from(users)
+    .innerJoin(roles, eq(roles.id, users.roleId))
+    .where(orgWhere(users, auth.org.id, eq(users.status, 'active'), ne(users.id, auth.user.id)))
+  for (const m of managers) {
+    if (!m.permissions.includes(PERMISSIONS.INSTALLATION_MANAGE)) continue
+    if (quietMinutes) {
+      const [recent] = await tx
+        .select({ id: notifications.id })
+        .from(notifications)
+        .where(
+          orgWhere(
+            notifications,
+            auth.org.id,
+            eq(notifications.userId, m.id),
+            eq(notifications.type, n.type),
+            eq(notifications.link, n.link),
+            isNull(notifications.readAt),
+            gt(notifications.createdAt, new Date(Date.now() - quietMinutes * 60_000)),
+          ),
+        )
+        .limit(1)
+      if (recent) continue
+    }
+    await notify(tx, { organizationId: auth.org.id, userId: m.id, ...n })
+  }
 }
 
 async function wonTender(tx: DbOrTx, auth: TenantAuth, tenderId: string): Promise<Tender> {
@@ -661,6 +702,14 @@ export async function saveConsigneeWork(
       .update(installationConsignees)
       .set({ status: input.status })
       .where(orgWhere(installationConsignees, orgId, eq(installationConsignees.id, consignee.id)))
+    if (input.status === 'completed' && consignee.status !== 'completed') {
+      await notifyInstallationManagers(tx, auth, {
+        type: 'installation.completed',
+        title: 'Installation completed',
+        body: `${tender.referenceNo} · ${consignee.name} · by ${auth.user.name}`,
+        link: `/tenders/${tender.id}`,
+      })
+    }
 
     let rowCount = 0
     for (const sent of input.items) {

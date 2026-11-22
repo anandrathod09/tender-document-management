@@ -13,16 +13,7 @@ defineProps<{
   flush?: boolean
   /** 1 when the card title is the page's own title (list pages). */
   level?: 1 | 2
-  /** Coloured left edge on the header, as in the old TMS report pages. */
-  accent?: 'blue' | 'red' | 'green' | 'purple'
 }>()
-
-const ACCENTS = {
-  blue: 'border-l-4 border-l-blue-500',
-  red: 'border-l-4 border-l-red-500',
-  green: 'border-l-4 border-l-green-500',
-  purple: 'border-l-4 border-l-purple-500',
-} as const
 </script>
 
 <template>
@@ -31,10 +22,7 @@ const ACCENTS = {
   >
     <header
       v-if="title || $slots.header"
-      :class="[
-        'flex flex-wrap items-center gap-x-6 gap-y-3 rounded-t-md border-b border-gray-200 p-4 dark:border-gray-800',
-        accent && ACCENTS[accent],
-      ]"
+      class="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-t-md border-b border-gray-200 p-4 dark:border-gray-800"
     >
       <component
         :is="level === 1 ? 'h1' : 'h2'"

@@ -83,6 +83,30 @@ describe('user management', () => {
 
     const list = await request(app).get('/api/users').set('Host', ACME).set(bearer(adminToken))
     expect(list.body.map((u: { email: string }) => u.email)).toContain('ravi@acme.test')
+
+    // Engineers need a phone number, when invited or when someone becomes one.
+    const noPhone = await request(app)
+      .post('/api/users')
+      .set('Host', ACME)
+      .set(bearer(adminToken))
+      .send({ name: 'Esha', email: 'esha@acme.test', roleId: roles.engineer!.id })
+    expect(noPhone.body.error).toMatchObject({
+      code: 'PHONE_REQUIRED',
+      details: [expect.objectContaining({ field: 'phone' })],
+    })
+    const toEngineer = await request(app)
+      .patch(`/api/users/${res.body.user.id}`)
+      .set('Host', ACME)
+      .set(bearer(adminToken))
+      .send({ roleId: roles.engineer!.id })
+    expect(toEngineer.body.error.code).toBe('PHONE_REQUIRED')
+    const withPhone = await request(app)
+      .patch(`/api/users/${res.body.user.id}`)
+      .set('Host', ACME)
+      .set(bearer(adminToken))
+      .send({ roleId: roles.engineer!.id, phone: '9822012345' })
+    expect(withPhone.body.role.key).toBe('engineer')
+    expect((await edit('')).body.error.code).toBe('PHONE_REQUIRED')
   })
 
   it('refuses a duplicate email and enforces the plan user limit', async () => {

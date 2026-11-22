@@ -25,6 +25,7 @@ import {
   getWorkableConsignee,
   listEngineers,
   listSites,
+  notifyInstallationManagers,
   saveConsigneeWork,
   saveReport,
 } from './service'
@@ -67,14 +68,32 @@ installationRouter.post(
     if (!type || (type.mime !== 'application/pdf' && !IMAGE_MIMES.includes(type.mime))) {
       throw badRequest('UNSUPPORTED_FILE', 'Upload a PDF, JPG or PNG file')
     }
-    const file = await storeFile(db, {
-      organizationId: auth.org.id,
-      kind: 'consignee_document',
-      bytes: req.file.buffer,
-      originalName: req.file.originalname,
-      tenderId: tender.id,
-      consigneeId: consignee.id,
-      uploadedBy: auth.user.id,
+    const upload = req.file
+    const file = await db.transaction(async (tx) => {
+      const stored = await storeFile(tx, {
+        organizationId: auth.org.id,
+        kind: 'consignee_document',
+        bytes: upload.buffer,
+        originalName: upload.originalname,
+        tenderId: tender.id,
+        consigneeId: consignee.id,
+        uploadedBy: auth.user.id,
+      })
+      // Admins hear about an engineer's uploads (one notice for a batch of files).
+      if (!auth.permissions.has(PERMISSIONS.INSTALLATION_MANAGE)) {
+        await notifyInstallationManagers(
+          tx,
+          auth,
+          {
+            type: 'installation.document',
+            title: 'Installation document uploaded',
+            body: `${tender.referenceNo} · ${consignee.name}: ${stored.originalName} · by ${auth.user.name}`,
+            link: `/tenders/${tender.id}#consignee-${consignee.id}`,
+          },
+          15,
+        )
+      }
+      return stored
     })
     res.status(201).json({
       id: file.id,

@@ -37,6 +37,18 @@ export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
 
 export const ALL_PERMISSIONS: Permission[] = Object.values(PERMISSIONS)
 
+/**
+ * A role that works only on its own installation consignees (the Engineer
+ * role). Such people must have a phone number, because admins call them
+ * about installations.
+ */
+export function isEngineerRole(permissions: readonly string[]): boolean {
+  return (
+    permissions.includes(PERMISSIONS.INSTALLATION_OWN) &&
+    !permissions.includes(PERMISSIONS.INSTALLATION_MANAGE)
+  )
+}
+
 export type DefaultRoleKey = 'admin' | 'agent' | 'engineer' | 'viewer'
 
 /** Roles copied into every new client workspace. */

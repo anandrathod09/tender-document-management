@@ -271,6 +271,17 @@ describe('installation reports, assets, tickets and reports', () => {
     expect(foreignItem.body.error.code).toBe('ITEM_NOT_FOUND')
     expect((await patch(theirs!.id, { status: 'completed', items: [] })).status).toBe(404)
 
+    // Marking it completed tells the admin.
+    expect((await patch(mine!.id, { status: 'completed', items: [] })).status).toBe(200)
+    const adminNotes = await request(app)
+      .get('/api/notifications')
+      .set('Host', ACME)
+      .set(bearer(adminToken))
+    expect(adminNotes.body.items[0]).toMatchObject({
+      type: 'installation.completed',
+      body: expect.stringContaining('Main office'),
+    })
+
     // The installed assets list shows only their units.
     const assets = (
       await request(app).get('/api/assets').set('Host', ACME).set(bearer(engineer.token))
@@ -307,6 +318,19 @@ describe('installation reports, assets, tickets and reports', () => {
       .set(bearer(engineer.token))
       .attach('file', pdf, 'installation-certificate.pdf')
     expect(up.status).toBe(201)
+    // The admin is told once, even when several files go up one after another.
+    await request(app)
+      .post(url(mine!.id))
+      .set('Host', ACME)
+      .set(bearer(engineer.token))
+      .attach('file', pdf, 'site-photo.pdf')
+    const notes = await request(app)
+      .get('/api/notifications')
+      .set('Host', ACME)
+      .set(bearer(adminToken))
+    expect(
+      notes.body.items.filter((n: { type: string }) => n.type === 'installation.document'),
+    ).toHaveLength(1)
     // Not onto someone else's consignee.
     const foreign = await request(app)
       .post(url(theirs!.id))
@@ -321,12 +345,15 @@ describe('installation reports, assets, tickets and reports', () => {
         .set('Host', ACME)
         .set(bearer(adminToken))
     ).body as InstallationReport
-    expect(asAdmin.consignees[0]!.documents).toEqual([
-      expect.objectContaining({
-        originalName: 'installation-certificate.pdf',
-        uploadedBy: { id: engineer.id, name: 'eng' },
-      }),
+    const docs = asAdmin.consignees[0]!.documents
+    expect(docs.map((d) => d.originalName).sort()).toEqual([
+      'installation-certificate.pdf',
+      'site-photo.pdf',
     ])
+    expect(docs.find((d) => d.id === up.body.id)!.uploadedBy).toEqual({
+      id: engineer.id,
+      name: 'eng',
+    })
     const link = (token: string) =>
       request(app).post(`/api/files/${up.body.id}/link`).set('Host', ACME).set(bearer(token))
     expect((await link(engineer.token)).status).toBe(200)

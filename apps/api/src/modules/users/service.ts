@@ -7,6 +7,7 @@ import type {
   UserStatus,
   UserSummary,
 } from '@tdm/shared'
+import { isEngineerRole } from '@tdm/shared'
 import { db, type DbOrTx } from '../../db/client'
 import { orgWhere } from '../../db/scope'
 import { organizations, plans, roles, users, type Organization, type User } from '../../db/schema'
@@ -104,6 +105,18 @@ async function getRoleInOrg(conn: DbOrTx, orgId: string, roleId: string) {
   return role
 }
 
+/** Engineers need a phone number: admins call them about installations. */
+function assertEngineerPhone(role: { permissions: string[] }, phone: string | null | undefined) {
+  if (isEngineerRole(role.permissions) && !phone) {
+    throw badRequest('PHONE_REQUIRED', 'Engineers need a phone number', [
+      {
+        field: 'phone',
+        message: 'Engineers need a phone number, so admins can call them about installations',
+      },
+    ])
+  }
+}
+
 async function getUserInOrg(conn: DbOrTx, orgId: string, userId: string): Promise<User> {
   const [user] = await conn
     .select()
@@ -159,7 +172,8 @@ async function assertSeatAvailable(conn: DbOrTx, orgId: string) {
 /** Creates an invited user and emails them a link to set their password. */
 export async function inviteUser(org: Organization, actor: Actor, input: InviteUserInput) {
   const result = await db.transaction(async (tx) => {
-    await getRoleInOrg(tx, org.id, input.roleId)
+    const role = await getRoleInOrg(tx, org.id, input.roleId)
+    assertEngineerPhone(role, input.phone)
     await assertSeatAvailable(tx, org.id)
 
     const userId = randomUUID()
@@ -254,6 +268,10 @@ export async function updateUser(
     const targetStatus: UserStatus | undefined =
       input.status === 'active' && !user.passwordHash ? 'invited' : input.status
     const roleChanged = newRole.id !== user.roleId
+    // Checked when someone becomes an engineer or an engineer's phone is removed.
+    if (roleChanged || input.phone !== undefined) {
+      assertEngineerPhone(newRole, input.phone !== undefined ? input.phone : user.phone)
+    }
     const statusChanged = targetStatus !== undefined && targetStatus !== user.status
     const suspending = statusChanged && targetStatus === 'suspended'
 

@@ -14,7 +14,7 @@
  * these public passwords can never exist on a live server.
  */
 import ExcelJS from 'exceljs'
-import { asc, count, desc, eq, isNull } from 'drizzle-orm'
+import { asc, count, desc, eq, inArray, isNull } from 'drizzle-orm'
 import { installationReportSchema } from '@tdm/shared'
 import { env } from '../config/env'
 import { addDays, todayIn } from '../lib/dates'
@@ -162,10 +162,10 @@ async function ensureCompany(orgId: string) {
 }
 
 /** A small Tender247-style sheet with deadlines in the coming weeks. */
+type SheetRow = readonly [string, string, string, number, string, string, number]
+
 async function sampleSheet(): Promise<Buffer> {
-  const today = todayIn('Asia/Kolkata')
-  const indian = (iso: string) => iso.split('-').reverse().join('-')
-  const rows = [
+  return tenderSheet([
     [
       '98001',
       'GEM/2026/B/7365884',
@@ -193,7 +193,13 @@ async function sampleSheet(): Promise<Buffer> {
       'Nashik',
       12500000,
     ],
-  ] as const
+  ])
+}
+
+/** A Tender247-style sheet; the number in each row is days until the deadline. */
+async function tenderSheet(rows: SheetRow[]): Promise<Buffer> {
+  const today = todayIn('Asia/Kolkata')
+  const indian = (iso: string) => iso.split('-').reverse().join('-')
   const wb = new ExcelJS.Workbook()
   const ws = wb.addWorksheet('GeM Tenders')
   ws.addRow([
@@ -247,7 +253,13 @@ async function ensureTenders(orgId: string) {
 }
 
 /** Creates or resets a demo team member with a role and the demo password. */
-async function ensureMember(orgId: string, roleKey: string, email: string, name: string) {
+async function ensureMember(
+  orgId: string,
+  roleKey: string,
+  email: string,
+  name: string,
+  phone?: string,
+) {
   const [role] = await db
     .select()
     .from(roles)
@@ -269,13 +281,20 @@ async function ensureMember(orgId: string, roleKey: string, email: string, name:
         inviteExpiresAt: null,
         totpSecret: null,
         totpEnabledAt: null,
+        ...(phone && !existing.phone && { phone }),
       })
       .where(orgWhere(users, orgId, eq(users.id, existing.id)))
     return existing
   }
-  await db
-    .insert(users)
-    .values({ organizationId: orgId, email, name, passwordHash, roleId: role.id, status: 'active' })
+  await db.insert(users).values({
+    organizationId: orgId,
+    email,
+    name,
+    phone: phone ?? null,
+    passwordHash,
+    roleId: role.id,
+    status: 'active',
+  })
   const [created] = await db
     .select()
     .from(users)
@@ -325,8 +344,113 @@ const PATH_TO_ENGINEER = [
  * A tender that already has an installation report is never touched.
  * Returns the reference number of that tender, or null when nothing changed.
  */
+/** Assigns a new tender to the demo agent and walks it to "Assigned to engineer" as the admin. */
+async function walkToEngineer(
+  auth: TenantAuth,
+  tender: { id: string; estimatedCost: number | null },
+) {
+  const stages = await db.select().from(workflowStages).where(orgWhere(workflowStages, auth.org.id))
+  const byKey = new Map(stages.map((s) => [s.key, s]))
+  const [agent] = await db
+    .select({ id: users.id })
+    .from(users)
+    .where(orgWhere(users, auth.org.id, eq(users.email, DEMO.agentEmail)))
+  if (!agent) throw new Error('the demo agent is missing')
+  await assignTender(auth, tender.id, { agentId: agent.id })
+  for (const key of PATH_TO_ENGINEER) {
+    const stage = byKey.get(key)
+    if (!stage) throw new Error(`stage "${key}" is missing`)
+    await moveTender(auth, tender.id, {
+      stageId: stage.id,
+      comment: 'Demo data',
+      ...(stage.type === 'won' && { awardAmount: Math.round(tender.estimatedCost ?? 100000) }),
+    })
+  }
+}
+
+/**
+ * Won tenders waiting in "Assigned to engineer" with no installation report,
+ * for the admin to practise filling one in (and choosing Demo Engineer on a
+ * consignee). Added once; tenders that already exist are left as they are.
+ */
+const PRACTICE_TENDERS: SheetRow[] = [
+  [
+    '98101',
+    'GEM/2026/B/7512001',
+    'Supply and installation of desktop computers - 25 Nos',
+    6,
+    'Zilla Parishad',
+    'Nashik',
+    1850000,
+  ],
+  [
+    '98102',
+    'GEM/2026/B/7512002',
+    'Laser printers and UPS for taluka offices',
+    7,
+    'Collector Office',
+    'Pune',
+    620000,
+  ],
+  [
+    '98103',
+    'GEM/2026/B/7512003',
+    'CCTV cameras for school buildings - 60 Nos',
+    8,
+    'Education Department',
+    'Thane',
+    2400000,
+  ],
+]
+
+async function ensurePracticeTenders(orgId: string): Promise<string[]> {
+  const refs = PRACTICE_TENDERS.map((r) => r[1])
+  const existing = await db
+    .select({ referenceNo: tenders.referenceNo })
+    .from(tenders)
+    .where(orgWhere(tenders, orgId, inArray(tenders.referenceNo, refs)))
+  const missing = PRACTICE_TENDERS.filter((r) => !existing.some((e) => e.referenceNo === r[1]))
+  if (!missing.length) return []
+  const auth = await adminAuth(orgId)
+  await importTenders(auth, {
+    buffer: await tenderSheet(missing),
+    originalname: 'Demo-Installation-Practice.xlsx',
+  })
+  const added = await db
+    .select()
+    .from(tenders)
+    .where(
+      orgWhere(
+        tenders,
+        orgId,
+        inArray(
+          tenders.referenceNo,
+          missing.map((r) => r[1]),
+        ),
+      ),
+    )
+  const done: string[] = []
+  for (const t of added) {
+    try {
+      await walkToEngineer(auth, t)
+      done.push(t.referenceNo)
+    } catch (err) {
+      console.warn(
+        `Could not move ${t.referenceNo} to "Assigned to engineer": ${(err as Error).message}`,
+      )
+    }
+  }
+  return done
+}
+
 async function ensureEngineer(orgId: string): Promise<string | null> {
-  const engineer = await ensureMember(orgId, 'engineer', DEMO.engineerEmail, 'Demo Engineer')
+  const engineer = await ensureMember(
+    orgId,
+    'engineer',
+    DEMO.engineerEmail,
+    'Demo Engineer',
+    '9800012345',
+  )
   if (!engineer) return null
   const [linked] = await db
     .select({ n: count() })
@@ -364,23 +488,15 @@ async function ensureEngineer(orgId: string): Promise<string | null> {
     if (next) await moveTender(auth, tender.id, { stageId: next.id, comment: 'Demo data' })
   }
   if (!tender) {
-    const free = all.find((t) => !t.assignedAgentId && t.deadline >= todayIn(auth.org.timezone))
-    const [agent] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(orgWhere(users, orgId, eq(users.email, DEMO.agentEmail)))
-    if (!free || !agent) return null
+    const free = all.find(
+      (t) =>
+        !t.assignedAgentId &&
+        t.deadline >= todayIn(auth.org.timezone) &&
+        !PRACTICE_TENDERS.some((r) => r[1] === t.referenceNo),
+    )
+    if (!free) return null
     try {
-      await assignTender(auth, free.id, { agentId: agent.id })
-      for (const key of PATH_TO_ENGINEER) {
-        const stage = byKey.get(key)
-        if (!stage) throw new Error(`stage "${key}" is missing`)
-        await moveTender(auth, free.id, {
-          stageId: stage.id,
-          comment: 'Demo data',
-          ...(stage.type === 'won' && { awardAmount: Math.round(free.estimatedCost ?? 100000) }),
-        })
-      }
+      await walkToEngineer(auth, free)
     } catch (err) {
       console.warn(`Could not prepare a tender for the demo engineer: ${(err as Error).message}`)
       return null
@@ -431,6 +547,7 @@ async function main() {
   const assigned = await ensureAgent(org.id)
   await ensureMember(org.id, 'viewer', DEMO.viewerEmail, 'Demo Viewer')
   const engineerTender = await ensureEngineer(org.id)
+  const practice = await ensurePracticeTenders(org.id)
 
   const url = env.PUBLIC_URL_TEMPLATE.replace('{slug}', DEMO.slug)
   const ownerUrl = env.PUBLIC_URL_TEMPLATE.replace('{slug}', env.OWNER_SUBDOMAIN)
@@ -442,7 +559,13 @@ Demo ready${created ? ` (${created} sample tenders added)` : ''}
                 ${DEMO.agentEmail} / ${DEMO.memberPassword}   (Agent${assigned ? `, ${assigned} tenders assigned` : ''})
                 ${DEMO.engineerEmail} / ${DEMO.memberPassword}   (Engineer${engineerTender ? `, engineer on ${engineerTender}` : ''})
                 ${DEMO.viewerEmail} / ${DEMO.memberPassword}   (Viewer, read only)
-
+${
+  practice.length
+    ? `
+  Waiting for an installation report ("Assigned to engineer"): ${practice.join(', ')}
+`
+    : ''
+}
   Owner panel   ${ownerUrl}
                 ${DEMO.ownerEmail} / ${DEMO.ownerPassword}
 `)

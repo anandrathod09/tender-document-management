@@ -69,7 +69,8 @@ What the command does:
 - Adds a bidding company and 3 sample tenders, but only if the demo client has no tenders yet, so your work is never overwritten.
 - Creates the Viewer login (read only).
 - Creates the Agent login and, if the agent has no tenders yet, assigns the two oldest unassigned tenders to them.
-- Creates the Engineer login. If the engineer is not on any tender yet, it takes one tender through the normal steps (assigned, bid, won, "Assigned to engineer") and adds an installation report with a consignee for "Demo Engineer" and two report templates (a desktop with Monitor and CPU serial numbers, and a printer with one serial number). A tender that already has an installation report is never changed.
+- Adds three won tenders waiting in "Assigned to engineer" with no installation report (GEM/2026/B/7512001, …7512002, …7512003), so you can practise filling one in as the admin and choosing "Demo Engineer" on a consignee. They are added once; running the command again does not change them.
+- Creates the Engineer login. If the engineer is not on any tender yet, it takes one tender through the normal steps (assigned, bid, won, "Assigned to engineer") and adds an installation report with a consignee for "Demo Engineer" and two items (a desktop with Monitor and CPU serial numbers, and a printer with one serial number). A tender that already has an installation report is never changed.
 - Running it again resets these logins, for example after trying two-step login.
 
 **Seeing the app as an agent or engineer.** There is no separate agent or engineer app. Everyone signs in at the same address and sees the same screens, limited by their role (see [Roles](#roles-and-what-each-person-sees)). To try it, sign in as `agent@demo.test` or `engineer@demo.test` in a private window.
@@ -182,19 +183,24 @@ Every client starts with four roles. Each person has their own login: the admin 
 
 After a tender is won, the admin fills in its **Installation Report** (the old TMS "Hardware Installation Report"): the order details, then one or more **consignees** (delivery locations), each with an engineer.
 
-Each consignee has one or more **report templates**, as in the old TMS. "Add Report Template" asks for:
+Each consignee has one or more **items**, which were the old TMS "report templates". **Add item** asks for:
 
-- **Template 1:** Monitor serial number, CPU serial number, installation status, remark.
-- **Template 2:** One common serial number, installation status, remark.
-- **Number of items:** how many rows the template has.
+- the item name and configuration
+- how its serial numbers are recorded:
+  - **One serial number**, for printers, UPS and similar
+  - **Monitor and CPU serial numbers**, for desktops (the old "Report template 1")
+- the number of units
+- the warranty
 
-Each template has its own item name and configuration (several lines), its warranty in years and months, and its rows. One consignee can mix both types, for example desktops with Monitor and CPU serials and printers with one serial.
+Each unit is one row: serial number(s), installed yes/no, installation date and remarks. One consignee can mix both kinds of item.
 
 - **Rows left empty are not saved.** They stay as rows to fill in on screen and in the PDF, but they are not units on the Installed assets page until someone fills them in.
-- **Generate PDF** prints all consignees, or one chosen consignee. The table numbers each template once and writes its item name once down all its rows. A common serial spans both the Monitor and CPU columns, as in the old report.
-- **On the tender page,** the whole report is shown read only below the documents. Each consignee also has its uploaded documents there.
+- **Generate PDF** prints all consignees, or one chosen consignee. The table numbers each item once and writes its name once down all its rows. A single serial number spans both the Monitor and CPU columns, as in the old report.
+- **On the tender page,** the report is shown read only, with each consignee's documents.
 - **In the "Assigned to engineer" and "Completed" lists,** extra columns show each consignee and its engineer, with their email and phone (the old "Engineer Tenders" page). The search also finds consignee and engineer names.
-- **When a client is moved from the old TMS,** each old template keeps its type, item name, warranty and number of rows. Rows with nothing filled in are skipped, and consignee documents stay with their consignee.
+- **Admins get a bell notification** when an engineer marks a consignee "Completed" or uploads documents (one notification for a batch of files).
+- **Engineers must have a phone number**, entered when they are invited or when someone's role changes to Engineer. The Users page flags engineers without one.
+- **When a client is moved from the old TMS,** each old template becomes an item with its type, name, warranty and number of rows. Rows with nothing filled in are skipped, and consignee documents stay with their consignee.
 
 ## Workflow stages
 

@@ -19,7 +19,6 @@ import CompanyPanel from './CompanyPanel.vue'
 import CompliancePanel from './CompliancePanel.vue'
 import DocumentsPanel from './DocumentsPanel.vue'
 import InstallationReportView from '@/features/installation/InstallationReportView.vue'
-import InstallationPanel from './InstallationPanel.vue'
 import MovePanel from './MovePanel.vue'
 
 /**
@@ -303,7 +302,6 @@ const heading = 'text-sm font-semibold tracking-wider text-gray-700 uppercase da
             :tender="tender"
             @moved="onChanged"
           />
-          <InstallationPanel v-if="afterWin" :tender="tender" />
           <CompanyPanel
             :tender="tender"
             :companies="companies"
