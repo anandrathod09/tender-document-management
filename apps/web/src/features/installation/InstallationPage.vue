@@ -425,6 +425,9 @@ const orderFacts = computed(() => {
 
 const cell =
   'h-9 w-full rounded-md border border-gray-300 bg-transparent px-2 text-theme-sm disabled:bg-gray-50 disabled:text-gray-500 dark:border-gray-700 dark:text-white/90 dark:disabled:bg-white/5'
+/** On phones each row is a card: its cells stack with a small label on top. */
+const phoneCell = 'py-1 pr-2 max-md:block max-md:p-0'
+const phoneLabel = 'mb-1 block text-xs text-gray-500 md:hidden dark:text-gray-400'
 </script>
 
 <template>
@@ -634,7 +637,9 @@ const cell =
                   <span class="text-sm font-medium text-gray-800 dark:text-white/90"
                     >Item {{ k + 1 }}</span
                   >
-                  <span class="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400">
+                  <span
+                    class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 dark:text-gray-400"
+                  >
                     <span>{{ SERIAL_TYPE_SHORT[it.serialType] }}</span>
                     <span>{{ it.rows.filter(filled).length }} of {{ it.rows.length }} filled</span>
                     <span>{{ installedOf(it.rows) }} installed</span>
@@ -676,9 +681,10 @@ const cell =
                     </p>
                   </div>
 
-                  <div class="custom-scrollbar overflow-x-auto">
-                    <table class="w-full min-w-[720px] text-theme-sm">
-                      <thead>
+                  <!-- A table on wider screens; on phones each unit is a small card. -->
+                  <div class="custom-scrollbar md:overflow-x-auto">
+                    <table class="w-full text-theme-sm max-md:block md:min-w-[720px]">
+                      <thead class="max-md:hidden">
                         <tr
                           class="border-b border-gray-200 text-left text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400"
                         >
@@ -694,11 +700,20 @@ const cell =
                           <th v-if="canManage" class="w-10" />
                         </tr>
                       </thead>
-                      <tbody>
-                        <tr v-for="(r, ri) in it.rows" :key="r.id ?? `${it.key}-${ri}`">
-                          <td class="py-1 pr-2 text-gray-400 tabular-nums">{{ ri + 1 }}</td>
+                      <tbody class="max-md:block max-md:space-y-3">
+                        <tr
+                          v-for="(r, ri) in it.rows"
+                          :key="r.id ?? `${it.key}-${ri}`"
+                          class="max-md:grid max-md:grid-cols-2 max-md:gap-3 max-md:rounded-lg max-md:border max-md:border-gray-200 max-md:p-3 max-md:dark:border-gray-800"
+                        >
+                          <td
+                            class="py-1 pr-2 text-gray-400 tabular-nums max-md:col-span-2 max-md:p-0 max-md:text-xs max-md:font-medium max-md:text-gray-600 max-md:dark:text-gray-300"
+                          >
+                            <span class="md:hidden">Unit </span>{{ ri + 1 }}
+                          </td>
                           <template v-if="it.serialType === 'split'">
-                            <td class="py-1 pr-2">
+                            <td :class="phoneCell" class="max-md:col-span-2">
+                              <span :class="phoneLabel">Monitor serial</span>
                               <input
                                 v-model="r.monitorSerial"
                                 :class="cell"
@@ -706,7 +721,8 @@ const cell =
                                 :aria-label="`Monitor serial, item ${k + 1}, unit ${ri + 1}`"
                               />
                             </td>
-                            <td class="py-1 pr-2">
+                            <td :class="phoneCell" class="max-md:col-span-2">
+                              <span :class="phoneLabel">CPU serial</span>
                               <input
                                 v-model="r.cpuSerial"
                                 :class="cell"
@@ -715,7 +731,8 @@ const cell =
                               />
                             </td>
                           </template>
-                          <td v-else class="py-1 pr-2">
+                          <td v-else :class="phoneCell" class="max-md:col-span-2">
+                            <span :class="phoneLabel">Serial number</span>
                             <input
                               v-model="r.serialNumber"
                               :class="cell"
@@ -723,7 +740,8 @@ const cell =
                               :aria-label="`Serial number, item ${k + 1}, unit ${ri + 1}`"
                             />
                           </td>
-                          <td class="py-1 pr-2">
+                          <td :class="phoneCell">
+                            <span :class="phoneLabel">Installed</span>
                             <UiSelect
                               v-model="r.installStatus"
                               :aria-label="`Installed, item ${k + 1}, unit ${ri + 1}`"
@@ -733,7 +751,8 @@ const cell =
                               @update:model-value="dirty = true"
                             />
                           </td>
-                          <td class="py-1 pr-2">
+                          <td :class="phoneCell">
+                            <span :class="phoneLabel">Installed on</span>
                             <input
                               v-model="r.installedOn"
                               type="date"
@@ -742,7 +761,8 @@ const cell =
                               :aria-label="`Installed on, item ${k + 1}, unit ${ri + 1}`"
                             />
                           </td>
-                          <td class="py-1 pr-2">
+                          <td :class="phoneCell" class="max-md:col-span-2">
+                            <span :class="phoneLabel">Remarks</span>
                             <input
                               v-model="r.remarks"
                               :class="cell"
@@ -750,7 +770,10 @@ const cell =
                               :aria-label="`Remarks, item ${k + 1}, unit ${ri + 1}`"
                             />
                           </td>
-                          <td v-if="canManage" class="py-1">
+                          <td
+                            v-if="canManage"
+                            class="py-1 max-md:col-span-2 max-md:p-0 max-md:text-right"
+                          >
                             <IconButton
                               :icon="ACTION_ICONS.delete"
                               :label="`Remove unit ${ri + 1} of item ${k + 1}`"

@@ -3,7 +3,7 @@ import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../src/db/client'
 import { tenders } from '../src/db/schema'
-import { sweepOrganization } from '../src/modules/tenders/deadlines'
+import { remindDeadlines, sweepOrganization } from '../src/modules/tenders/deadlines'
 import {
   app,
   bearer,
@@ -14,7 +14,7 @@ import {
   resetDb,
   setupClient,
 } from './helpers'
-import { importFile, inDays, listAll, stagesOf, t247Row, workbook } from './tender-helpers'
+import { addUser, importFile, inDays, listAll, stagesOf, t247Row, workbook } from './tender-helpers'
 
 const ACME = hostOf('acme')
 
@@ -87,5 +87,44 @@ describe('daily deadline rules', () => {
     // 19:00 UTC on 9 March is 00:30 on 10 March in India: the 9 March deadline has passed there.
     const at = new Date('2027-03-09T19:00:00Z')
     expect((await sweepOrganization(orgId, 'Asia/Kolkata', 3, at)).missedDeadline).toBe(1)
+  })
+
+  it('reminds the assigned person two days before the deadline and on the day, once each', async () => {
+    const { stages, set } = await setup()
+    const agent = await addUser(ACME, adminToken, 'agent', 'bids@acme.test')
+    await set('A/1', {
+      stageId: stages['in-progress']!.id,
+      assignedAgentId: agent.id,
+      deadline: inDays(2),
+    })
+    await set('A/2', {
+      stageId: stages['price-review']!.id,
+      assignedAgentId: agent.id,
+      deadline: inDays(0),
+    })
+    // Already submitted, or nobody to remind: no reminder.
+    await set('A/3', {
+      stageId: stages.submitted!.id,
+      assignedAgentId: agent.id,
+      deadline: inDays(1),
+    })
+    await set('A/4', { stageId: stages['in-progress']!.id, deadline: inDays(1) })
+
+    expect(await remindDeadlines(orgId, 'Asia/Kolkata')).toBe(2)
+    // The job runs every hour: nothing is sent twice.
+    expect(await remindDeadlines(orgId, 'Asia/Kolkata')).toBe(0)
+
+    const list = await request(app)
+      .get('/api/notifications')
+      .set('Host', ACME)
+      .set(bearer(agent.token))
+    const titles = (list.body.items as { title: string }[]).map((n) => n.title).sort()
+    expect(titles).toHaveLength(2)
+    expect(titles[0]).toMatch(/^Bid due on .+: A\/1$/)
+    expect(titles[1]).toMatch(/^Bid due today \(.+\): A\/2$/)
+
+    // An extended deadline is reminded about again when it comes close.
+    await set('A/1', { deadline: inDays(1) })
+    expect(await remindDeadlines(orgId, 'Asia/Kolkata')).toBe(1)
   })
 })

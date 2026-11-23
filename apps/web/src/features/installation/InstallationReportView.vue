@@ -86,6 +86,10 @@ const contact = (c: ConsigneeRow) =>
     c.fax && `Fax ${c.fax}`,
     c.callAlignedDate && `Call aligned ${formatDate(c.callAlignedDate)}`,
   ].filter(Boolean)
+
+/** On phones each row is a card: its cells stack with a small label on top. */
+const phoneCell = 'px-3 py-2 max-md:block max-md:p-0 max-md:break-words'
+const phoneLabel = 'block text-xs text-gray-500 md:hidden dark:text-gray-400'
 </script>
 
 <template>
@@ -200,9 +204,10 @@ const contact = (c: ConsigneeRow) =>
               {{ warrantyText(it.warrantyMonths) }}
             </p>
           </div>
-          <div class="custom-scrollbar overflow-x-auto">
-            <table class="w-full min-w-[560px] text-sm">
-              <thead>
+          <!-- A table on wider screens; on phones each unit is a small card. -->
+          <div class="custom-scrollbar md:overflow-x-auto">
+            <table class="w-full text-sm max-md:block md:min-w-[560px]">
+              <thead class="max-md:hidden">
                 <tr
                   class="border-b border-gray-200 text-left text-xs text-gray-500 dark:border-gray-800 dark:text-gray-400"
                 >
@@ -217,25 +222,41 @@ const contact = (c: ConsigneeRow) =>
                   <th class="px-3 py-2 font-medium">Remarks</th>
                 </tr>
               </thead>
-              <tbody class="divide-y divide-gray-100 dark:divide-gray-800">
+              <tbody class="divide-y divide-gray-100 max-md:block dark:divide-gray-800">
                 <tr
                   v-for="(u, ri) in rowsOf(it)"
                   :key="u?.id ?? `empty-${ri}`"
-                  class="text-gray-700 dark:text-gray-300"
+                  class="text-gray-700 max-md:grid max-md:grid-cols-2 max-md:gap-2 max-md:p-3 dark:text-gray-300"
                 >
-                  <td class="px-3 py-2 text-gray-400 tabular-nums">{{ ri + 1 }}</td>
+                  <td
+                    class="px-3 py-2 text-gray-400 tabular-nums max-md:col-span-2 max-md:p-0 max-md:text-xs max-md:font-medium max-md:text-gray-600 max-md:dark:text-gray-300"
+                  >
+                    <span class="md:hidden">Unit </span>{{ ri + 1 }}
+                  </td>
                   <template v-if="it.serialType === 'split'">
-                    <td class="px-3 py-2">{{ u?.monitorSerial || '—' }}</td>
-                    <td class="px-3 py-2">{{ u?.cpuSerial || '—' }}</td>
+                    <td :class="phoneCell">
+                      <span :class="phoneLabel">Monitor serial</span>{{ u?.monitorSerial || '—' }}
+                    </td>
+                    <td :class="phoneCell">
+                      <span :class="phoneLabel">CPU serial</span>{{ u?.cpuSerial || '—' }}
+                    </td>
                   </template>
-                  <td v-else class="px-3 py-2">{{ u?.serialNumber || '—' }}</td>
-                  <td class="px-3 py-2">
+                  <td v-else :class="phoneCell" class="max-md:col-span-2">
+                    <span :class="phoneLabel">Serial number</span>{{ u?.serialNumber || '—' }}
+                  </td>
+                  <td :class="phoneCell">
+                    <span :class="phoneLabel">Status</span>
                     <UiBadge :color="INSTALL_BADGE[u?.installStatus ?? 'pending'].color">
                       {{ INSTALL_BADGE[u?.installStatus ?? 'pending'].label }}
                     </UiBadge>
                   </td>
-                  <td class="px-3 py-2">{{ u?.installedOn ? formatDate(u.installedOn) : '—' }}</td>
-                  <td class="px-3 py-2">{{ u?.remarks || '—' }}</td>
+                  <td :class="phoneCell">
+                    <span :class="phoneLabel">Installed on</span
+                    >{{ u?.installedOn ? formatDate(u.installedOn) : '—' }}
+                  </td>
+                  <td :class="phoneCell" class="max-md:col-span-2">
+                    <span :class="phoneLabel">Remarks</span>{{ u?.remarks || '—' }}
+                  </td>
                 </tr>
               </tbody>
             </table>

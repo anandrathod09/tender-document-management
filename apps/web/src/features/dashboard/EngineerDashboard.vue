@@ -146,8 +146,14 @@ const clear = () => {
     <PageHeader title="My Assigned Installations" :icon="Wrench" />
     <UiAlert v-if="error" class="mb-4">{{ error }}</UiAlert>
 
-    <div class="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-      <UiStatCard title="Total Consignees" :value="sites.length" :icon="Building2" />
+    <!-- Two per row on phones, so the counts don't fill the whole first screen. -->
+    <div class="mb-6 grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+      <UiStatCard
+        class="max-lg:col-span-2"
+        title="Total Consignees"
+        :value="sites.length"
+        :icon="Building2"
+      />
       <UiStatCard title="Pending" :value="count('pending')" :icon="Clock" />
       <UiStatCard title="Partial" :value="count('partial')" :icon="Clock" />
       <UiStatCard title="Installed" :value="count('installed')" :icon="CheckCircle2" />

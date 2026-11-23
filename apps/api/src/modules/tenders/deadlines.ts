@@ -1,12 +1,19 @@
-import { and, eq, inArray, isNull, lt } from 'drizzle-orm'
+import { and, between, eq, gte, inArray, isNotNull, isNull, lt } from 'drizzle-orm'
 import { DEADLINE_BOUND_TYPES } from '@tdm/shared'
 import { db } from '../../db/client'
 import { orgWhere } from '../../db/scope'
-import { organizations, tenders, tenderStageHistory, workflowStages } from '../../db/schema'
+import {
+  notifications,
+  organizations,
+  tenders,
+  tenderStageHistory,
+  workflowStages,
+} from '../../db/schema'
 import { writeAudit } from '../../lib/audit'
 import { addDays, todayIn } from '../../lib/dates'
 import { logger } from '../../lib/logger'
 import { registerJob } from '../jobs/queue'
+import { notify } from '../notifications/service'
 import { getStageByRole } from '../workflow/service'
 
 /** Days after the deadline before an unassigned open tender is deleted (client setting). */
@@ -113,6 +120,89 @@ export async function sweepOrganization(
   })
 }
 
+/** Reminders start this many days before the deadline. */
+export const REMIND_DAYS = 2
+
+const shortDate = (ymd: string) =>
+  new Date(`${ymd}T00:00:00Z`).toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    timeZone: 'UTC',
+  })
+
+/**
+ * Reminds the assigned person about bids still being prepared or reviewed:
+ * once when the deadline is two days (or less) away, and again on the day.
+ * Each reminder goes out once per deadline, so an extended deadline is
+ * reminded about afresh.
+ */
+export async function remindDeadlines(
+  orgId: string,
+  timezone: string,
+  now = new Date(),
+): Promise<number> {
+  const today = todayIn(timezone, now)
+  const due = await db
+    .select({
+      id: tenders.id,
+      referenceNo: tenders.referenceNo,
+      title: tenders.title,
+      deadline: tenders.deadline,
+      agentId: tenders.assignedAgentId,
+    })
+    .from(tenders)
+    .innerJoin(workflowStages, eq(workflowStages.id, tenders.stageId))
+    .where(
+      orgWhere(
+        tenders,
+        orgId,
+        inArray(workflowStages.type, [...DEADLINE_BOUND_TYPES]),
+        isNotNull(tenders.assignedAgentId),
+        between(tenders.deadline, today, addDays(today, REMIND_DAYS)),
+      ),
+    )
+  if (!due.length) return 0
+
+  // What was already sent recently, so a reminder is not repeated every hour.
+  const sent = await db
+    .select({ userId: notifications.userId, link: notifications.link, title: notifications.title })
+    .from(notifications)
+    .where(
+      orgWhere(
+        notifications,
+        orgId,
+        inArray(notifications.type, ['tender.deadline_soon', 'tender.deadline_today']),
+        gte(notifications.createdAt, new Date(now.getTime() - 14 * 86_400_000)),
+      ),
+    )
+  const seen = new Set(sent.map((n) => `${n.userId}|${n.link}|${n.title}`))
+
+  let reminded = 0
+  for (const t of due) {
+    const isToday = t.deadline === today
+    const date = shortDate(t.deadline)
+    const days = Math.round((Date.parse(t.deadline) - Date.parse(today)) / 86_400_000)
+    // The title names the deadline, so it is unique per reminder and deadline.
+    const title = isToday
+      ? `Bid due today (${date}): ${t.referenceNo}`
+      : `Bid due on ${date}: ${t.referenceNo}`
+    const link = `/tenders/${t.id}`
+    const key = `${t.agentId}|${link}|${title}`
+    if (seen.has(key)) continue
+    await notify(db, {
+      organizationId: orgId,
+      userId: t.agentId!,
+      type: isToday ? 'tender.deadline_today' : 'tender.deadline_soon',
+      title,
+      body: `${isToday ? 'Closes today' : days === 1 ? 'Closes tomorrow' : `Closes in ${days} days`} · ${t.title}`,
+      link,
+    })
+    seen.add(key)
+    reminded++
+  }
+  return reminded
+}
+
 /** Runs the deadline rules for every active client. */
 export async function sweepAllOrganizations(now = new Date()): Promise<void> {
   const orgs = await db
@@ -132,7 +222,10 @@ export async function sweepAllOrganizations(now = new Date()): Promise<void> {
         Number.isFinite(days) ? days : DEFAULT_CLEANUP_DAYS,
         now,
       )
-      if (r.missedDeadline || r.deleted) logger.info({ orgId: org.id, ...r }, 'Deadline sweep')
+      const reminded = await remindDeadlines(org.id, org.timezone, now)
+      if (r.missedDeadline || r.deleted || reminded) {
+        logger.info({ orgId: org.id, ...r, reminded }, 'Deadline sweep')
+      }
     } catch (err) {
       logger.error({ err, orgId: org.id }, 'Deadline sweep failed')
     }
