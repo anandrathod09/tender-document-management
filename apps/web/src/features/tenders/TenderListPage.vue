@@ -169,6 +169,11 @@ const sinceLabel = computed(() => {
 // Closed stages (Completed) show the note given when the tender was closed, as in the old TMS.
 const showStageComment = computed(() => stage.value?.type === 'closed')
 
+// Installation (Assigned to engineer) and finished (Completed) lists only open the tender, as
+// in the old TMS: engineers are assigned in the installation report, and the move to
+// Completed is made on the tender page after checking that report.
+const viewOnly = computed(() => ['execution', 'closed'].includes(stage.value?.type ?? ''))
+
 // After the win, the old "Engineer Tenders" columns: each consignee and its engineer.
 const showInstallation = computed(
   () =>
@@ -424,7 +429,7 @@ onBeforeUnmount(() => {
         :columns="columns"
         :rows="page?.items ?? []"
         :loading="loading"
-        :selectable="canAssign || canMove"
+        :selectable="!viewOnly && (canAssign || canMove)"
         :row-label="(t) => t.referenceNo"
         scroll-height="max(450px, calc(100vh - 380px))"
         loading-text="Loading tenders..."
@@ -590,31 +595,33 @@ onBeforeUnmount(() => {
 
         <template #actions="{ row }">
           <IconButton :icon="ACTION_ICONS.view" label="View Details" :to="`/tenders/${row.id}`" />
-          <IconButton
-            v-if="canAssign"
-            :icon="ACTION_ICONS.assign"
-            :label="row.assignedAgent ? `Change assignee (${row.assignedAgent.name})` : 'Assign'"
-            :disabled="selected.length > 0"
-            @click="openAssign([row])"
-          />
-          <template v-if="quickMoves(row).length">
+          <template v-if="!viewOnly">
             <IconButton
-              v-for="k in quickMoves(row)"
-              :key="k"
-              :icon="quickIcon(k)"
-              :label="quickLabel(k)"
-              :variant="k === 'reject' ? 'danger' : 'default'"
+              v-if="canAssign"
+              :icon="ACTION_ICONS.assign"
+              :label="row.assignedAgent ? `Change assignee (${row.assignedAgent.name})` : 'Assign'"
               :disabled="selected.length > 0"
-              @click="openQuick(k, [row])"
+              @click="openAssign([row])"
+            />
+            <template v-if="quickMoves(row).length">
+              <IconButton
+                v-for="k in quickMoves(row)"
+                :key="k"
+                :icon="quickIcon(k)"
+                :label="quickLabel(k)"
+                :variant="k === 'reject' ? 'danger' : 'default'"
+                :disabled="selected.length > 0"
+                @click="openQuick(k, [row])"
+              />
+            </template>
+            <IconButton
+              v-else-if="canMove && rules.nextFor(row).length"
+              :icon="ACTION_ICONS.move"
+              label="Move to another stage"
+              :disabled="selected.length > 0"
+              @click="openMove([row])"
             />
           </template>
-          <IconButton
-            v-else-if="canMove && rules.nextFor(row).length"
-            :icon="ACTION_ICONS.move"
-            label="Move to another stage"
-            :disabled="selected.length > 0"
-            @click="openMove([row])"
-          />
         </template>
 
         <template #empty>
