@@ -84,15 +84,18 @@ Without SMTP settings, emails (such as invitations) are kept locally instead of 
 
 ## Everyday commands
 
-| Command                                  | What it does                                                   |
-| ---------------------------------------- | -------------------------------------------------------------- |
-| `npm run dev`                            | API and web app with live reload                               |
-| `npm test`                               | API tests (uses the `_test` database and wipes it)             |
-| `npm run typecheck`                      | Type-checks all packages                                       |
-| `npm run build`                          | Production builds of the API and web app                       |
-| `npm run db:generate -- --name <change>` | Creates a migration after editing `apps/api/src/db/schema.ts`  |
-| `npm run db:migrate`                     | Applies pending migrations                                     |
-| `npm run db:demo`                        | Creates or resets the local demo client and logins (see above) |
+| Command                                  | What it does                                                             |
+| ---------------------------------------- | ------------------------------------------------------------------------ |
+| `npm run dev`                            | API and web app with live reload                                         |
+| `npm test`                               | API tests (uses the `_test` database and wipes it)                       |
+| `npm run typecheck`                      | Type-checks all packages                                                 |
+| `npm run build`                          | Production builds of the API and web app                                 |
+| `npm run db:generate -- --name <change>` | Creates a migration after editing `apps/api/src/db/schema.ts`            |
+| `npm run db:migrate`                     | Applies pending migrations                                               |
+| `npm run db:demo`                        | Creates or resets the local demo client and logins (see above)           |
+| `npm run docs:pdf`                       | Rebuilds `docs/Tender-Flow.pdf` from `docs/tender-flow/tender-flow.html` |
+
+**Tender flow guide.** `docs/Tender-Flow.pdf` explains the whole tender flow for customers: stages, who moves what, deadlines, installation, after-sales and the rules. Its source is `docs/tender-flow/tender-flow.html`. When a stage, move rule, role or the installation or after-sales flow changes, update that file, add a line to its "What changed" table, change the "Last updated" date, and run `npm run docs:pdf`.
 
 ## Rules for client data
 
