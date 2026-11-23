@@ -159,6 +159,37 @@ function selectAssets() {
     .leftJoin(users, eq(users.id, installationConsignees.engineerId))
 }
 
+/** How many units fall in each warranty status, for the other filters on screen. */
+async function warrantyCounts(
+  auth: TenantAuth,
+  query: Partial<Query>,
+  today: string,
+): Promise<Record<WarrantyStatus, number>> {
+  const n = (status: WarrantyStatus) =>
+    sql<number>`COALESCE(SUM(CASE WHEN ${warrantyCondition(status, today)} THEN 1 ELSE 0 END), 0)`
+  const [r] = await db
+    .select({
+      expired: n('expired'),
+      expiring_30: n('expiring_30'),
+      expiring_90: n('expiring_90'),
+      active: n('active'),
+      not_set: n('not_set'),
+    })
+    .from(installedAssets)
+    .innerJoin(installationConsignees, eq(installationConsignees.id, installedAssets.consigneeId))
+    .innerJoin(installationReports, eq(installationReports.id, installationConsignees.reportId))
+    .innerJoin(tenders, eq(tenders.id, installedAssets.tenderId))
+    .leftJoin(users, eq(users.id, installationConsignees.engineerId))
+    .where(baseQuery(auth, { ...query, warranty: undefined }, today))
+  return {
+    expired: Number(r?.expired ?? 0),
+    expiring_30: Number(r?.expiring_30 ?? 0),
+    expiring_90: Number(r?.expiring_90 ?? 0),
+    active: Number(r?.active ?? 0),
+    not_set: Number(r?.not_set ?? 0),
+  }
+}
+
 export async function listAssets(auth: TenantAuth, query: Query): Promise<AssetPage> {
   const today = todayIn(auth.org.timezone)
   const where = baseQuery(auth, query, today)
@@ -181,10 +212,11 @@ export async function listAssets(auth: TenantAuth, query: Query): Promise<AssetP
     total: total?.n ?? 0,
     page: query.page,
     pageSize: query.pageSize,
+    warrantyCounts: await warrantyCounts(auth, query, today),
   }
 }
 
-/** Every visible unit matching the filters, for the Excel export (capped). */
+/** Every visible unit matching the filters, for the Excel export (capped), in screen order. */
 export async function allAssets(
   auth: TenantAuth,
   query: Partial<Query>,
@@ -194,6 +226,8 @@ export async function allAssets(
   const rows = await selectAssets()
     .where(baseQuery(auth, query, today))
     .orderBy(
+      sql`(${warrantyEnd}) IS NULL`,
+      asc(warrantyEnd),
       asc(tenders.referenceNo),
       asc(installationConsignees.sortOrder),
       asc(installedAssets.sortOrder),

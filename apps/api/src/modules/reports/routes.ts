@@ -1,5 +1,10 @@
 import { Router, type Response } from 'express'
-import { PERMISSIONS, reportQuerySchema, tenderListQuerySchema } from '@tdm/shared'
+import {
+  assetListQuerySchema,
+  PERMISSIONS,
+  reportQuerySchema,
+  tenderListQuerySchema,
+} from '@tdm/shared'
 import { todayIn } from '../../lib/dates'
 import { parse } from '../../lib/validate'
 import { authenticateTenant, requirePermission, tenantAuth } from '../../middleware/auth'
@@ -32,11 +37,17 @@ reportsRouter.get(
   },
 )
 
+/** Takes the same filters as GET /assets (search, warranty, installed, engineer). */
 reportsRouter.get(
   '/export/assets.xlsx',
   requirePermission(PERMISSIONS.REPORT_EXPORT),
   async (req, res) => {
     const auth = tenantAuth(req)
-    sendXlsx(res, `Installed_assets_${todayIn(auth.org.timezone)}.xlsx`, await exportAssets(auth))
+    const query = parse(assetListQuerySchema, req.query)
+    sendXlsx(
+      res,
+      `Installed_assets_${todayIn(auth.org.timezone)}.xlsx`,
+      await exportAssets(auth, query),
+    )
   },
 )

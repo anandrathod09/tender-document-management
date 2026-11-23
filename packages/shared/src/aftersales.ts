@@ -230,7 +230,7 @@ export type WarrantyStatus = (typeof WARRANTY_STATUSES)[number]
 export const WARRANTY_LABELS: Record<WarrantyStatus, string> = {
   expired: 'Expired',
   expiring_30: 'Ends within 30 days',
-  expiring_90: 'Ends within 90 days',
+  expiring_90: 'Ends in 31–90 days',
   active: 'Active',
   not_set: 'Not set',
 }
@@ -261,6 +261,8 @@ export interface AssetPage {
   total: number
   page: number
   pageSize: number
+  /** Units per warranty status, for the same filters except the warranty one. */
+  warrantyCounts: Record<WarrantyStatus, number>
 }
 
 // ---------------------------------------------------------------------------

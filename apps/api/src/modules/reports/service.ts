@@ -7,10 +7,12 @@ import {
   WARRANTY_LABELS,
   reportQuerySchema,
   type AgentRow,
+  assetListQuerySchema,
   type AssetListItem,
   type MonthlyRow,
   type ReportSummary,
   type StageType,
+  type TenderConsigneeSummary,
 } from '@tdm/shared'
 import type { z } from 'zod'
 import { db } from '../../db/client'
@@ -31,6 +33,8 @@ import {
   tenderListOrder,
   tenderListWhere,
   visibilityScope,
+  withConsignees,
+  withStageComments,
   type ListQuery,
 } from '../tenders/service'
 import { countOpenTickets } from '../tickets/service'
@@ -210,10 +214,10 @@ const DATE = 'dd-mm-yyyy'
 /** The tender list as shown (same filters and order), as an Excel file. */
 export async function exportTenders(auth: TenantAuth, query: ListQuery): Promise<Buffer> {
   const agentsAlias = alias(users, 'agent')
-  const rows = await db
+  const raw = await db
     .select({
       t: tenders,
-      stage: workflowStages.label,
+      stageLabel: workflowStages.label,
       stageType: workflowStages.type,
       agent: agentsAlias.name,
       company: biddingCompanies.name,
@@ -225,7 +229,22 @@ export async function exportTenders(auth: TenantAuth, query: ListQuery): Promise
     .where(tenderListWhere(auth, query))
     .orderBy(...tenderListOrder(query.sort))
     .limit(EXPORT_CAP)
+  const rows = await withStageComments(
+    auth,
+    await withConsignees(
+      auth,
+      raw.map((r) => ({
+        ...r,
+        id: r.t.id,
+        stage: { id: r.t.stageId },
+        stageComment: null as string | null,
+        consignees: [] as TenderConsigneeSummary[],
+      })),
+    ),
+  )
   type R = (typeof rows)[number]
+  const names = (list: (string | null | undefined)[]) =>
+    [...new Set(list.filter((x): x is string => !!x))].join(', ') || null
   const columns: Column<R>[] = [
     { header: 'Reference no.', width: 28, value: (r) => r.t.referenceNo },
     { header: 'Tender247 ID', width: 14, value: (r) => r.t.sourceTenderId },
@@ -242,7 +261,9 @@ export async function exportTenders(auth: TenantAuth, query: ListQuery): Promise
     { header: 'EMD (₹)', width: 12, value: (r) => Number(r.t.emd), format: MONEY },
     { header: 'Document fee (₹)', width: 14, value: (r) => Number(r.t.documentFee), format: MONEY },
     { header: 'Deadline', width: 12, value: (r) => asDate(r.t.deadline), format: DATE },
-    { header: 'Stage', width: 18, value: (r) => r.stage },
+    { header: 'Stage', width: 18, value: (r) => r.stageLabel },
+    { header: 'In stage since', width: 13, value: (r) => r.t.stageChangedAt, format: DATE },
+    { header: 'Stage note', width: 40, value: (r) => r.stageComment },
     { header: 'Assigned to', width: 20, value: (r) => r.agent },
     { header: 'Bidding company', width: 24, value: (r) => r.company },
     {
@@ -252,14 +273,23 @@ export async function exportTenders(auth: TenantAuth, query: ListQuery): Promise
       format: MONEY,
     },
     { header: 'Award / PO no.', width: 16, value: (r) => r.t.awardNumber },
+    { header: 'Consignees', width: 36, value: (r) => names(r.consignees.map((c) => c.name)) },
+    {
+      header: 'Engineers',
+      width: 24,
+      value: (r) => names(r.consignees.map((c) => c.engineer?.name)),
+    },
     { header: 'Added on', width: 12, value: (r) => r.t.createdAt, format: DATE },
   ]
   return buildWorkbook('Tenders', columns, rows)
 }
 
-/** Installed units with warranty dates, as an Excel file. */
-export async function exportAssets(auth: TenantAuth): Promise<Buffer> {
-  const rows = await allAssets(auth, {}, EXPORT_CAP)
+/** Installed units with warranty dates, as an Excel file (same filters as the Assets page). */
+export async function exportAssets(
+  auth: TenantAuth,
+  query: Partial<z.output<typeof assetListQuerySchema>> = {},
+): Promise<Buffer> {
+  const rows = await allAssets(auth, query, EXPORT_CAP)
   const installLabel: Record<(typeof INSTALL_STATUSES)[number], string> = {
     installed: 'Yes',
     not_installed: 'No',
@@ -279,6 +309,7 @@ export async function exportAssets(auth: TenantAuth): Promise<Buffer> {
     { header: 'Installed on', width: 12, value: (r) => asDate(r.installedOn), format: DATE },
     { header: 'Warranty (months)', width: 10, value: (r) => r.warrantyMonths },
     { header: 'Warranty ends', width: 13, value: (r) => asDate(r.warrantyEnd), format: DATE },
+    { header: 'Days left', width: 10, value: (r) => r.daysLeft },
     { header: 'Warranty status', width: 18, value: (r) => WARRANTY_LABELS[r.warrantyStatus] },
     { header: 'Remarks', width: 30, value: (r) => r.remarks },
   ]

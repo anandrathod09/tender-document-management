@@ -30,6 +30,7 @@ import {
   type TenderDetail,
   type TenderSortField,
   type TenderPage,
+  type TenderConsigneeSummary,
   type TenderSummary,
   type UpdateTenderInput,
   tenderListQuerySchema,
@@ -141,34 +142,45 @@ function toSummary(r: SummaryRow): TenderSummary {
   }
 }
 
+/** Runs `fn` on slices of ids, so big exports don't build one huge IN (...) list. */
+async function inChunks<R>(ids: string[], fn: (slice: string[]) => Promise<R[]>): Promise<R[]> {
+  const out: R[] = []
+  for (let i = 0; i < ids.length; i += 1000) out.push(...(await fn(ids.slice(i, i + 1000))))
+  return out
+}
+
+type WithStage = { id: string; stage: { id: string }; stageComment: string | null }
+type WithConsignees = { id: string; consignees: TenderConsigneeSummary[] }
+
 /**
  * Adds the comment of each tender's move into its current stage, shown on
  * lists such as Completed ("Completion Notes", as in the old TMS).
  */
-async function withStageComments(auth: TenantAuth, items: TenderSummary[]) {
+export async function withStageComments<T extends WithStage>(
+  auth: TenantAuth,
+  items: T[],
+): Promise<T[]> {
   if (!items.length) return items
-  const rows = await db
-    .select({
-      tenderId: tenderStageHistory.tenderId,
-      toStageId: tenderStageHistory.toStageId,
-      comment: tenderStageHistory.comment,
-    })
-    .from(tenderStageHistory)
-    .where(
-      orgWhere(
-        tenderStageHistory,
-        auth.org.id,
-        inArray(
-          tenderStageHistory.tenderId,
-          items.map((t) => t.id),
-        ),
-      ),
-    )
-    .orderBy(desc(tenderStageHistory.createdAt))
-  for (const t of items) {
-    t.stageComment =
-      rows.find((r) => r.tenderId === t.id && r.toStageId === t.stage.id)?.comment ?? null
+  const rows = await inChunks(
+    items.map((t) => t.id),
+    (ids) =>
+      db
+        .select({
+          tenderId: tenderStageHistory.tenderId,
+          toStageId: tenderStageHistory.toStageId,
+          comment: tenderStageHistory.comment,
+        })
+        .from(tenderStageHistory)
+        .where(orgWhere(tenderStageHistory, auth.org.id, inArray(tenderStageHistory.tenderId, ids)))
+        .orderBy(desc(tenderStageHistory.createdAt)),
+  )
+  // Newest first, so the first match per tender and stage is the latest move.
+  const latest = new Map<string, string | null>()
+  for (const r of rows) {
+    const key = `${r.tenderId}:${r.toStageId}`
+    if (!latest.has(key)) latest.set(key, r.comment)
   }
+  for (const t of items) t.stageComment = latest.get(`${t.id}:${t.stage.id}`) ?? null
   return items
 }
 
@@ -176,55 +188,61 @@ async function withStageComments(auth: TenantAuth, items: TenderSummary[]) {
  * Adds each tender's installation consignees and their engineers (the old
  * "Engineer Tenders" columns). Engineers only see their own consignees.
  */
-async function withConsignees(auth: TenantAuth, items: TenderSummary[]): Promise<TenderSummary[]> {
+export async function withConsignees<T extends WithConsignees>(
+  auth: TenantAuth,
+  items: T[],
+): Promise<T[]> {
   if (!items.length) return items
   const engineers = alias(users, 'consignee_engineer')
   const ownOnly =
     !auth.permissions.has(PERMISSIONS.INSTALLATION_MANAGE) &&
     auth.permissions.has(PERMISSIONS.INSTALLATION_OWN)
-  const rows = await db
-    .select({
-      tenderId: installationReports.tenderId,
-      id: installationConsignees.id,
-      name: installationConsignees.name,
-      designation: installationConsignees.designation,
-      engineerId: engineers.id,
-      engineerName: engineers.name,
-      engineerEmail: engineers.email,
-      engineerPhone: engineers.phone,
+  const rows = await inChunks(
+    items.map((t) => t.id),
+    (ids) =>
+      db
+        .select({
+          tenderId: installationReports.tenderId,
+          id: installationConsignees.id,
+          name: installationConsignees.name,
+          designation: installationConsignees.designation,
+          engineerId: engineers.id,
+          engineerName: engineers.name,
+          engineerEmail: engineers.email,
+          engineerPhone: engineers.phone,
+        })
+        .from(installationConsignees)
+        .innerJoin(installationReports, eq(installationReports.id, installationConsignees.reportId))
+        .leftJoin(engineers, eq(engineers.id, installationConsignees.engineerId))
+        .where(
+          orgWhere(
+            installationConsignees,
+            auth.org.id,
+            inArray(installationReports.tenderId, ids),
+            ownOnly ? eq(installationConsignees.engineerId, auth.user.id) : undefined,
+          ),
+        )
+        .orderBy(asc(installationConsignees.sortOrder)),
+  )
+  const byTender = new Map<string, TenderConsigneeSummary[]>()
+  for (const r of rows) {
+    const list = byTender.get(r.tenderId) ?? []
+    list.push({
+      id: r.id,
+      name: r.name,
+      designation: r.designation,
+      engineer: r.engineerId
+        ? {
+            id: r.engineerId,
+            name: r.engineerName ?? '',
+            email: r.engineerEmail ?? '',
+            phone: r.engineerPhone,
+          }
+        : null,
     })
-    .from(installationConsignees)
-    .innerJoin(installationReports, eq(installationReports.id, installationConsignees.reportId))
-    .leftJoin(engineers, eq(engineers.id, installationConsignees.engineerId))
-    .where(
-      orgWhere(
-        installationConsignees,
-        auth.org.id,
-        inArray(
-          installationReports.tenderId,
-          items.map((t) => t.id),
-        ),
-        ownOnly ? eq(installationConsignees.engineerId, auth.user.id) : undefined,
-      ),
-    )
-    .orderBy(asc(installationConsignees.sortOrder))
-  for (const t of items) {
-    t.consignees = rows
-      .filter((r) => r.tenderId === t.id)
-      .map((r) => ({
-        id: r.id,
-        name: r.name,
-        designation: r.designation,
-        engineer: r.engineerId
-          ? {
-              id: r.engineerId,
-              name: r.engineerName ?? '',
-              email: r.engineerEmail ?? '',
-              phone: r.engineerPhone,
-            }
-          : null,
-      }))
+    byTender.set(r.tenderId, list)
   }
+  for (const t of items) t.consignees = byTender.get(t.id) ?? []
   return items
 }
 

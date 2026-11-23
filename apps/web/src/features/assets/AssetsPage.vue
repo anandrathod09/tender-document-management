@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { FileSpreadsheet, PackageCheck, Search } from 'lucide-vue-next'
 import { onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import type { AssetListItem, AssetPage, WarrantyStatus } from '@tdm/shared'
 import { WARRANTY_LABELS, WARRANTY_STATUSES } from '@tdm/shared'
 import { PERMISSIONS } from '@tdm/shared/permissions'
@@ -23,6 +23,7 @@ import { formatDeadline } from '@/utils/tenders'
 import NewTicketModal from '../tickets/NewTicketModal.vue'
 
 const auth = useAuthStore()
+const route = useRoute()
 const router = useRouter()
 const canExport = auth.can(PERMISSIONS.REPORT_EXPORT)
 const canTicket = auth.can(PERMISSIONS.TICKET_MANAGE)
@@ -33,7 +34,11 @@ const canFilterEngineer = !(
 
 const page = ref<AssetPage | null>(null)
 const q = ref('')
-const warranty = ref<WarrantyStatus | ''>('')
+// ?warranty=expiring_30 opens the page already filtered (links from Reports).
+const fromQuery = String(route.query.warranty ?? '')
+const warranty = ref<WarrantyStatus | ''>(
+  (WARRANTY_STATUSES as readonly string[]).includes(fromQuery) ? (fromQuery as WarrantyStatus) : '',
+)
 const installStatus = ref('')
 const engineerId = ref('')
 const engineers = ref<{ id: string; name: string }[]>([])
@@ -51,15 +56,44 @@ const warrantyColor: Record<WarrantyStatus, BadgeColor> = {
   not_set: 'gray',
 }
 
+/** The filters on screen, shared by the list and the Excel export. */
+function filters(): Record<string, string> {
+  const f: Record<string, string> = {}
+  if (q.value.trim()) f.q = q.value.trim()
+  if (warranty.value) f.warranty = warranty.value
+  if (installStatus.value) f.installStatus = installStatus.value
+  if (engineerId.value) f.engineerId = engineerId.value
+  return f
+}
+
+/** The warranty follow-up tiles: click one to show only those units. */
+const followUps: { status: WarrantyStatus; label: string; hint: string; tone: string }[] = [
+  {
+    status: 'expiring_30',
+    label: 'Ending in 30 days',
+    hint: 'Call the customer about renewal (AMC)',
+    tone: 'text-warning-700 dark:text-warning-500',
+  },
+  {
+    status: 'expiring_90',
+    label: 'Ending in 31–90 days',
+    hint: 'Plan the renewal follow-up',
+    tone: 'text-gray-800 dark:text-white/90',
+  },
+  {
+    status: 'expired',
+    label: 'Expired',
+    hint: 'Out of warranty: offer an AMC',
+    tone: 'text-error-600 dark:text-error-500',
+  },
+]
+const toggleWarranty = (s: WarrantyStatus) => (warranty.value = warranty.value === s ? '' : s)
+
 async function load() {
   loading.value = true
   error.value = ''
   try {
-    const params: Record<string, string | number> = { page: pageNo.value, pageSize: pageSize.value }
-    if (q.value.trim()) params.q = q.value.trim()
-    if (warranty.value) params.warranty = warranty.value
-    if (installStatus.value) params.installStatus = installStatus.value
-    if (engineerId.value) params.engineerId = engineerId.value
+    const params = { ...filters(), page: pageNo.value, pageSize: pageSize.value }
     page.value = (await api.get<AssetPage>('/assets', { params })).data
   } catch (err) {
     error.value = errorMessage(err)
@@ -101,7 +135,7 @@ const columns: TableColumn[] = [
 
 async function exportXlsx() {
   try {
-    await downloadFromApi('/reports/export/assets.xlsx', undefined, 'Installed_assets.xlsx')
+    await downloadFromApi('/reports/export/assets.xlsx', filters(), 'Installed_assets.xlsx')
   } catch (err) {
     error.value = errorMessage(err)
   }
@@ -171,11 +205,42 @@ const daysText = (a: AssetListItem) =>
         <IconButton
           v-if="canExport"
           :icon="FileSpreadsheet"
-          label="Export to Excel"
+          :label="
+            q || warranty || installStatus || engineerId
+              ? 'Export these units to Excel'
+              : 'Export to Excel'
+          "
           variant="primary"
           @click="exportXlsx"
         />
       </template>
+
+      <div class="mb-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <button
+          v-for="f in followUps"
+          :key="f.status"
+          type="button"
+          :aria-pressed="warranty === f.status"
+          class="rounded-lg border px-4 py-3 text-left transition-colors"
+          :class="
+            warranty === f.status
+              ? 'border-brand-500 bg-brand-50 dark:border-brand-400 dark:bg-brand-500/10'
+              : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50 dark:border-gray-800 dark:hover:bg-white/5'
+          "
+          @click="toggleWarranty(f.status)"
+        >
+          <span class="block text-theme-sm text-gray-600 dark:text-gray-400">{{ f.label }}</span>
+          <span
+            class="mt-1 block text-2xl font-semibold tabular-nums"
+            :class="page?.warrantyCounts[f.status] ? f.tone : 'text-gray-400 dark:text-gray-500'"
+          >
+            {{ page?.warrantyCounts[f.status] ?? '–' }}
+          </span>
+          <span class="mt-0.5 block text-theme-xs text-gray-500 dark:text-gray-400">{{
+            f.hint
+          }}</span>
+        </button>
+      </div>
 
       <DataTable
         :columns="columns"

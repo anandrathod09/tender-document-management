@@ -139,7 +139,7 @@ describe('installation reports, assets, tickets and reports', () => {
     expect(printers).toMatchObject({ serialType: 'common', units: [{ serialNumber: 'PR-1' }] })
     expect(saved.consignees[0]!.engineer).toMatchObject({ id: engineer.id, name: 'eng' })
 
-    // The engineer now sees the tender and was notified…
+    // The engineer now sees the tender and was notifiedâ€¦
     expect(
       (
         await request(app)
@@ -153,7 +153,7 @@ describe('installation reports, assets, tickets and reports', () => {
       .set('Host', ACME)
       .set(bearer(engineer.token))
     expect(notes.body.items[0].type).toBe('installation.assigned')
-    // …but not other tenders.
+    // â€¦but not other tenders.
     const other = (await listAll(ACME, adminToken)).items.find((t) => t.referenceNo === 'PWD/2')!.id
     expect(
       (
@@ -252,7 +252,7 @@ describe('installation reports, assets, tickets and reports', () => {
     expect(updated.items[0]!.units).toHaveLength(1)
     expect(updated.items[0]!.units[0]).toMatchObject({ cpuSerial: 'C-9', itemName: 'Desktop' })
 
-    // Not more rows than the admin set up…
+    // Not more rows than the admin set upâ€¦
     const tooMany = await patch(mine!.id, {
       status: 'execution',
       items: [
@@ -263,7 +263,7 @@ describe('installation reports, assets, tickets and reports', () => {
       ],
     })
     expect(tooMany.body.error.code).toBe('TOO_MANY_ROWS')
-    // …nor templates or consignees that are not theirs.
+    // â€¦nor templates or consignees that are not theirs.
     const foreignItem = await patch(mine!.id, {
       status: 'execution',
       items: [{ id: theirs!.items[0]!.id, units: [] }],
@@ -458,6 +458,35 @@ describe('installation reports, assets, tickets and reports', () => {
       .set('Host', ACME)
       .set(bearer(adminToken))
     expect((search.body as AssetPage).total).toBe(1)
+
+    // Follow-up counts per warranty status, whatever warranty filter is picked.
+    expect((expired.body as AssetPage).warrantyCounts).toEqual({
+      expired: 1,
+      expiring_30: 1,
+      expiring_90: 0,
+      active: 1,
+      not_set: 1,
+    })
+
+    // The Excel export takes the same filters as the list.
+    const sheetOf = async (url: string) => {
+      const res = await binary(request(app).get(url).set('Host', ACME).set(bearer(adminToken)))
+      expect(res.status).toBe(200)
+      const wb = new ExcelJS.Workbook()
+      await wb.xlsx.load(res.body as unknown as ArrayBuffer)
+      return wb.worksheets[0]!
+    }
+    const soon = await sheetOf('/api/reports/export/assets.xlsx?warranty=expiring_30')
+    expect(soon.rowCount).toBe(2) // header + the monitor
+    expect(soon.getRow(2).getCell(5).value).toBe('Monitor')
+    expect((await sheetOf('/api/reports/export/assets.xlsx')).rowCount).toBe(5)
+
+    // The tender export lists each tender's consignees and engineers.
+    const tendersSheet = await sheetOf('/api/reports/export/tenders.xlsx?q=PWD/1')
+    const header = (tendersSheet.getRow(1).values as unknown[]).map(String)
+    const row = tendersSheet.getRow(2)
+    expect(row.getCell(header.indexOf('Consignees')).value).toBe('Stores Officer')
+    expect(row.getCell(header.indexOf('Engineers')).value).toBe('eng')
   })
 
   it('tracks a service ticket from complaint to resolution', async () => {

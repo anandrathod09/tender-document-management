@@ -176,7 +176,7 @@ async function exportTenders() {
           {{ data.openTickets }} open service ticket(s)
         </RouterLink>
         <RouterLink
-          to="/assets"
+          to="/assets?warranty=expiring_30"
           class="rounded-full bg-gray-100 px-3 py-1 text-gray-700 hover:bg-gray-200 dark:bg-white/5 dark:text-gray-300"
         >
           {{ data.warrantiesEndingSoon }} warranty(ies) ending in the next 90 days
