@@ -211,7 +211,7 @@ const columns = computed<TableColumn[]>(() => [
   { key: 'stage', label: 'Tender Status', sort: true },
   ...(showAssignee.value
     ? ([
-        { key: 'assignedAgent', label: 'Assigned To', sort: true, class: 'min-w-48' },
+        { key: 'assignedAgent', label: 'Assigned Agent', sort: true, class: 'min-w-48' },
         { key: 'assignedAt', label: 'Assigned Date', sort: true },
       ] as TableColumn[])
     : []),

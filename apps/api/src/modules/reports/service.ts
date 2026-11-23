@@ -264,7 +264,7 @@ export async function exportTenders(auth: TenantAuth, query: ListQuery): Promise
     { header: 'Stage', width: 18, value: (r) => r.stageLabel },
     { header: 'In stage since', width: 13, value: (r) => r.t.stageChangedAt, format: DATE },
     { header: 'Stage note', width: 40, value: (r) => r.stageComment },
-    { header: 'Assigned to', width: 20, value: (r) => r.agent },
+    { header: 'Assigned agent', width: 20, value: (r) => r.agent },
     { header: 'Bidding company', width: 24, value: (r) => r.company },
     {
       header: 'Award amount (₹)',

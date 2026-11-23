@@ -43,7 +43,7 @@ async function done(message: string) {
             for="assigned-person"
             class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
           >
-            Assigned To
+            Assigned Agent
           </label>
           <input
             id="assigned-person"
