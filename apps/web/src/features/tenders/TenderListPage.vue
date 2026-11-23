@@ -13,6 +13,7 @@ import {
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { StageSummary, TenderPage, TenderSummary } from '@tdm/shared'
+import { agentLocked } from '@tdm/shared'
 import { PERMISSIONS } from '@tdm/shared/permissions'
 import DeadlineCell from '@/components/DeadlineCell.vue'
 import StageBadge from '@/components/StageBadge.vue'
@@ -227,6 +228,9 @@ const refParts = (ref: string) => ref.split(/(?<=\/)/)
 
 const recentlyUpdated = (iso: string | null) =>
   !!iso && Date.now() - Date.parse(iso) < 7 * 86_400_000
+// Results (Won, Lost, Not fit…) keep the agent who handled the bid; Rejected can be reassigned.
+const locked = (t: TenderSummary) =>
+  agentLocked({ ...t.stage, key: workflow.byId.get(t.stage.id)?.key })
 // After the win the bid deadline no longer matters: show the date plainly, without "Expired".
 const pastBidding = (t: TenderSummary) => ['won', 'execution', 'closed'].includes(t.stage.type)
 const expiredInView = computed(
@@ -375,7 +379,7 @@ onBeforeUnmount(() => {
             @click="openQuick(k, selectedTenders)"
           />
           <IconButton
-            v-if="canAssign"
+            v-if="canAssign && !selectedTenders.some(locked)"
             :icon="ACTION_ICONS.assign"
             label="Assign selected"
             variant="primary"
@@ -600,7 +604,7 @@ onBeforeUnmount(() => {
           <IconButton :icon="ACTION_ICONS.view" label="View Details" :to="`/tenders/${row.id}`" />
           <template v-if="!viewOnly">
             <IconButton
-              v-if="canAssign"
+              v-if="canAssign && !locked(row)"
               :icon="ACTION_ICONS.assign"
               :label="row.assignedAgent ? `Change assignee (${row.assignedAgent.name})` : 'Assign'"
               :disabled="selected.length > 0"

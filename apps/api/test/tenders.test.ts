@@ -231,6 +231,44 @@ describe('tenders and stages', () => {
     expect(agentAssigns.status).toBe(403)
   })
 
+  it('won, lost and dropped tenders keep their agent; rejected and reopened ones can be reassigned', async () => {
+    const assign = (id: string, agentId: string) =>
+      request(app)
+        .post(`/api/tenders/${id}/assign`)
+        .set('Host', ACME)
+        .set(bearer(adminToken))
+        .send({ agentId })
+    const bulk = (body: object) =>
+      request(app).post('/api/tenders/bulk').set('Host', ACME).set(bearer(adminToken)).send(body)
+    const first = await addUser(ACME, adminToken, 'agent', 'first@acme.test')
+    const second = await addUser(ACME, adminToken, 'agent', 'second@acme.test')
+    for (const ref of ['PWD/1', 'PWD/2', 'PWD/3']) await assign(ids[ref]!, first.id)
+
+    await move(ids['PWD/1']!, { stageId: stages.won!.id, awardAmount: 500000 })
+    await move(ids['PWD/2']!, { stageId: stages.lost!.id, comment: 'L1 was lower' })
+    await move(ids['PWD/3']!, { stageId: stages['not-fit']!.id, comment: 'Outside our region' })
+    for (const ref of ['PWD/1', 'PWD/2', 'PWD/3']) {
+      const res = await assign(ids[ref]!, second.id)
+      expect(res.status).toBe(400)
+      expect(res.body.error.code).toBe('AGENT_LOCKED')
+    }
+    // In bulk too, and nothing changes.
+    const many = await bulk({
+      action: 'assign',
+      ids: [ids['PWD/1'], ids['PWD/2']],
+      agentId: second.id,
+    })
+    expect(many.body.error.code).toBe('AGENT_LOCKED')
+    expect((await listAll(ACME, first.token)).items).toHaveLength(3)
+
+    // Rejected tenders are brought back by assigning them.
+    await move(ids['PWD/3']!, { stageId: stages.rejected!.id, comment: 'Not for us' })
+    expect((await assign(ids['PWD/3']!, second.id)).status).toBe(200)
+    // Moving a lost tender back reopens it for a new agent.
+    await move(ids['PWD/2']!, { stageId: stages['in-progress']!.id })
+    expect((await assign(ids['PWD/2']!, second.id)).status).toBe(200)
+  })
+
   it('bulk actions move or assign several tenders at once', async () => {
     const bulk = (body: object, token = adminToken) =>
       request(app).post('/api/tenders/bulk').set('Host', ACME).set(bearer(token)).send(body)

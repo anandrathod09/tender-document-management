@@ -14,6 +14,7 @@ import {
 } from 'drizzle-orm'
 import { alias, type AnyMySqlColumn } from 'drizzle-orm/mysql-core'
 import {
+  agentLocked,
   allowedNextStages,
   deadlineLocked,
   PERMISSIONS,
@@ -641,6 +642,12 @@ async function applyAssign(
 ) {
   const orgId = auth.org.id
   const current = await getStage(tx, orgId, tender.stageId)
+  if (agentLocked(current)) {
+    throw badRequest(
+      'AGENT_LOCKED',
+      `${tender.referenceNo} is in ${current.label}: its agent can no longer be changed. Move it back to reopen it first.`,
+    )
+  }
   const back = current.type === 'open' || current.key === 'rejected'
   const next = agentId && back ? await firstStageOfType(tx, orgId, 'preparing') : null
 

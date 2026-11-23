@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { Mail, Phone } from 'lucide-vue-next'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import type { TenderDetail } from '@tdm/shared'
+import { agentLocked } from '@tdm/shared'
 import { ACTION_ICONS } from '@/components/ui/actions'
 import IconButton from '@/components/ui/IconButton.vue'
 import UiAlert from '@/components/ui/UiAlert.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { api, errorMessage } from '@/services/api'
 import { formatDateTime } from '@/utils/format'
+import { useWorkflowStore } from '@/stores/workflow'
 import AssignTendersDialog from './AssignTendersDialog.vue'
 
 /**
@@ -17,6 +19,11 @@ import AssignTendersDialog from './AssignTendersDialog.vue'
 const props = defineProps<{ tender: TenderDetail; canAssign: boolean }>()
 const emit = defineEmits<{ assigned: [tender: TenderDetail] }>()
 
+// Results (Won, Lost, Not fit…) keep the agent who handled the bid.
+const workflow = useWorkflowStore()
+const locked = computed(() =>
+  agentLocked({ ...props.tender.stage, key: workflow.byId.get(props.tender.stage.id)?.key }),
+)
 const open = ref(false)
 const notice = ref('')
 const error = ref('')
@@ -53,13 +60,16 @@ async function done(message: string) {
           />
         </div>
         <IconButton
-          v-if="canAssign"
+          v-if="canAssign && !locked"
           class="mb-1.5"
           :icon="tender.assignedAgent ? ACTION_ICONS.edit : ACTION_ICONS.assign"
           :label="tender.assignedAgent ? 'Change Assignee' : 'Assign'"
           @click="open = true"
         />
       </div>
+      <p v-if="canAssign && locked" class="-mt-2 text-xs text-gray-500 dark:text-gray-400">
+        Locked in {{ tender.stage.label }}: the agent who handled the bid stays on the tender.
+      </p>
 
       <div
         v-if="tender.assignedAgent"

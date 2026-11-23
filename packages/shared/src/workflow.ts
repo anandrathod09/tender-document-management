@@ -31,6 +31,22 @@ export const STAGE_TYPE_LABELS: Record<StageType, string> = {
 /** Stage types whose tenders move to the missed-deadline stage when the deadline passes. */
 export const DEADLINE_BOUND_TYPES: readonly StageType[] = ['preparing', 'review']
 
+/**
+ * Results and after-win stages (Won, Lost, Assigned to engineer, Completed,
+ * Not fit, Not bidded) keep the agent who handled the bid, so agent reports
+ * stay true. Rejected is the exception: assigning a rejected tender brings it
+ * back. Reopening a tender (moving it back) unlocks it again.
+ */
+export const AGENT_LOCKED_TYPES: readonly StageType[] = [
+  'won',
+  'lost',
+  'dropped',
+  'execution',
+  'closed',
+]
+export const agentLocked = (stage: { type: StageType; key?: string | null }) =>
+  AGENT_LOCKED_TYPES.includes(stage.type) && stage.key !== 'rejected'
+
 /** Whether the comment box is shown when a tender moves into the stage. */
 export const COMMENT_MODES = ['off', 'optional', 'required'] as const
 export type CommentMode = (typeof COMMENT_MODES)[number]
