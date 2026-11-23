@@ -32,6 +32,8 @@ export interface NewFile {
   companyId?: string | null
   consigneeId?: string | null
   uploadedBy?: string | null
+  /** When it was first uploaded, if earlier than now (files moved from another system). */
+  createdAt?: Date
 }
 
 const GB = 1024 ** 3
@@ -100,6 +102,7 @@ export async function storeFile(conn: DbOrTx, f: NewFile): Promise<StoredFile> {
     companyId: f.companyId ?? null,
     consigneeId: f.consigneeId ?? null,
     uploadedBy: f.uploadedBy ?? null,
+    ...(f.createdAt && { createdAt: f.createdAt }),
   }
   try {
     await conn.insert(files).values(row)
@@ -107,7 +110,7 @@ export async function storeFile(conn: DbOrTx, f: NewFile): Promise<StoredFile> {
     await storage.remove(storageKey).catch(() => undefined)
     throw err
   }
-  return { ...row, createdAt: new Date(), deletedAt: null }
+  return { ...row, createdAt: f.createdAt ?? new Date(), deletedAt: null }
 }
 
 export async function getFile(conn: DbOrTx, orgId: string, id: string): Promise<StoredFile> {

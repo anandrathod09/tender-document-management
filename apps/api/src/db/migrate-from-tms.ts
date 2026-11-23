@@ -17,9 +17,14 @@ import { basename, isAbsolute, join, resolve } from 'node:path'
 import { parseArgs } from 'node:util'
 import { count, eq, inArray } from 'drizzle-orm'
 import mysql, { type RowDataPacket } from 'mysql2/promise'
-import { DEFAULT_ROLES, type EngineerStatus, type InstallStatus } from '@tdm/shared'
+import {
+  DEFAULT_CLEANUP_DAYS,
+  DEFAULT_ROLES,
+  type EngineerStatus,
+  type InstallStatus,
+} from '@tdm/shared'
 import { env } from '../config/env'
-import { todayIn } from '../lib/dates'
+import { addDays, todayIn } from '../lib/dates'
 import { writeAudit } from '../lib/audit'
 import { createDefaultStages } from '../modules/workflow/service'
 import { storeFile } from '../modules/files/service'
@@ -64,6 +69,8 @@ export interface MigrationReport {
   companies: number
   tenders: number
   byStage: Record<string, number>
+  /** Left out: still in New, nobody assigned, past the cleanup grace period. */
+  staleSkipped: string[]
   historyEntries: number
   installation: {
     reports: number
@@ -168,6 +175,25 @@ const str = (v: unknown, max = 255): string | null => {
   if (!s || /^(na|n\/a|null|undefined)$/i.test(s)) return null
   return s.slice(0, max)
 }
+/**
+ * Text the old system wrote by itself, or form hints saved as if they were notes
+ * ("Status Change Notes *"). Old notes join several parts with " | ".
+ */
+const OLD_NOISE = [
+  /^Automatically marked as expired( on \S+)?$/i,
+  /^[A-Za-z ]+ Notes \*$/,
+  /^Required when changing to .+\. Please provide details about this status change\.$/i,
+]
+/** An old note without the noise, or null when nothing real is left. */
+const notes = (v: unknown, max = 2000): string | null => {
+  const s = str(v, 10_000)
+  if (!s) return null
+  const kept = s
+    .split(' | ')
+    .map((part) => part.trim())
+    .filter((part) => part && !OLD_NOISE.some((re) => re.test(part)))
+  return kept.length ? kept.join(' | ').slice(0, max) : null
+}
 const num = (v: unknown) => (v === null || v === undefined || v === '' ? 0 : Number(v) || 0)
 const json = <T>(v: unknown, fallback: T): T => {
   if (v === null || v === undefined || v === '') return fallback
@@ -227,6 +253,7 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
     companies: 0,
     tenders: 0,
     byStage: {},
+    staleSkipped: [],
     historyEntries: 0,
     installation: { reports: 0, consignees: 0, templates: 0, units: 0, emptyRows: 0 },
     files: { library: 0, tenderDocuments: 0, consigneeDocuments: 0, companyImages: 0, missing: [] },
@@ -455,6 +482,8 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
       // ---- Tenders and their history -----------------------------------------
       const refs = new Set<string>()
       const tenderMap = new Map<string, string>()
+      // Same cut-off as the daily cleanup (deadline strictly before this day).
+      const staleBefore = addDays(todayIn(timezone), -DEFAULT_CLEANUP_DAYS)
       for (const t of oldTenders) {
         const id = UUID.test(String(t.id)) ? String(t.id) : crypto.randomUUID()
         const stageKey =
@@ -462,6 +491,20 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
             ? 'rejected'
             : (STAGE_MAP[String(t.workflowStatus ?? 'new')] ?? 'new')
         const current = stage(stageKey)
+        // Left out: still in New with nobody on it and past its deadline by more than the
+        // cleanup grace period. The daily cleanup would delete it on the first day anyway.
+        const oldDeadline = dateOf(t.deadline)
+        if (
+          stageKey === 'new' &&
+          !mapUser(t.assignedToAgent) &&
+          oldDeadline &&
+          oldDeadline < staleBefore
+        ) {
+          report.staleSkipped.push(
+            `${str(t.referenceNo, 191) ?? str(t.t247Id, 191) ?? id} (deadline ${oldDeadline})`,
+          )
+          continue
+        }
         let ref = str(t.referenceNo, 191) ?? str(t.t247Id, 191) ?? id
         if (refs.has(ref.toLowerCase())) {
           const unique = `${ref} (${t.t247Id ?? id.slice(0, 8)})`.slice(0, 191)
@@ -536,7 +579,7 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
         type Entry = { key: string; at: Date; comment: string; by: string | null }
         const entries: Entry[] = []
         const note = (key: string, text: unknown, at: unknown, by: unknown, prefix = '') => {
-          const comment = str(text, 2000)
+          const comment = notes(text)
           if (comment)
             entries.push({
               key,
@@ -562,7 +605,7 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
         note(
           'completed',
           [
-            str(t.tenderCompletedNotes, 1500),
+            notes(t.tenderCompletedNotes, 1500),
             str(t.clientFeedback, 1500) && `Client feedback: ${str(t.clientFeedback, 1500)}`,
           ]
             .filter(Boolean)
@@ -597,21 +640,27 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
           })
           last = to
         }
-        // General notes (including the old system's automatic ones) go on the final entry,
-        // not on a stage they may not belong to.
-        const generalNotes = str(t.agentNotes, 1500)
+        // General notes (without the old system's automatic ones) don't belong to one stage.
+        // If the tender reached its stage through a recorded step, they join that step's
+        // note, so they never hide it (it is shown as e.g. the Completion Notes).
+        const generalNotes = notes(t.agentNotes, 1500)
+        const reached = history.at(-1)!
+        if (last === current.id && generalNotes) {
+          reached.comment = [reached.comment, `Other notes: ${generalNotes}`]
+            .filter(Boolean)
+            .join('\n')
+            .slice(0, 2000)
+        }
         // Old timestamps often coincide (e.g. won date = last update): keep this entry last.
         const lastAt = history.at(-1)!.createdAt as Date
         const finalAt = new Date(Math.max(updatedAt.getTime(), lastAt.getTime() + 1))
-        if (last !== current.id || generalNotes) {
+        if (last !== current.id) {
           history.push({
             organizationId: orgId,
             tenderId: id,
             fromStageId: last,
             toStageId: current.id,
-            comment: generalNotes
-              ? `Carried over from the previous system. Notes: ${generalNotes}`
-              : 'Stage carried over from the previous system',
+            comment: generalNotes ? `Notes from the previous system: ${generalNotes}` : null,
             changedBy: null,
             createdAt: finalAt,
           })
@@ -639,6 +688,7 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
               originalName: f.originalName ?? f.filename ?? basename(path),
               title: `Compliance PDF (previous system)`,
               tenderId: id,
+              createdAt: timeOf(f.uploadedAt, updatedAt),
             })
           }
         }
@@ -703,7 +753,12 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
           engineerStatus?: string
           callAlignedDate?: string
           reportCards?: OldCard[]
-          documents?: { fileName?: string; fileKey?: string; fileUrl?: string }[]
+          documents?: {
+            fileName?: string
+            fileKey?: string
+            fileUrl?: string
+            uploadedAt?: string
+          }[]
         }
         for (const [ci, c] of json<OldConsignee[]>(r.consignees, []).entries()) {
           const consigneeId = crypto.randomUUID()
@@ -803,6 +858,7 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
                 originalName: d.fileName ?? basename(path),
                 tenderId,
                 consigneeId,
+                createdAt: timeOf(d.uploadedAt, new Date()),
               })
             }
           }
@@ -846,6 +902,7 @@ export async function migrateFromTms(opts: MigrationOptions): Promise<MigrationR
             originalName: basename(path),
             title,
             uploadedBy: mapUser(d.uploadedBy),
+            createdAt: timeOf(d.uploadedAt ?? d.createdAt, new Date()),
           })
         }
       }
@@ -879,6 +936,12 @@ export function formatReport(r: MigrationReport): string {
     ...Object.entries(r.byStage)
       .sort((a, b) => b[1] - a[1])
       .map(([stage, n]) => `  ${stage}: ${n}`),
+    ...(r.staleSkipped.length
+      ? [
+          `Left out: ${r.staleSkipped.length} tender(s) still in New with nobody assigned, more than ${DEFAULT_CLEANUP_DAYS} days past the deadline (the daily cleanup removes these):`,
+          ...r.staleSkipped.map((s) => `  - ${s}`),
+        ]
+      : []),
     `Stage history entries: ${r.historyEntries}`,
     `Installation reports: ${r.installation.reports} (${r.installation.consignees} consignees, ${r.installation.templates} report templates, ${r.installation.units} units; ${r.installation.emptyRows} empty rows skipped)`,
     `Files: ${r.files.library} library, ${r.files.tenderDocuments} tender documents, ${r.files.consigneeDocuments} consignee documents, ${r.files.companyImages} company images${r.dryRun ? ' (checked, not copied)' : ''}`,

@@ -228,7 +228,7 @@
   <li><strong>Add to Watchlist</strong> <span class="chip c-indigo">Watchlist</span> for tenders worth keeping an eye on; <strong>Remove from Watchlist</strong> sends them back to New.</li>
   <li><strong>Reject</strong> <span class="chip c-red">Rejected</span> for tenders the company will not bid on. A reason is required.</li>
   <li>Several tenders can be ticked and handled at once.</li>
-  <li class="muted">Automatic: a New or Watchlist tender that nobody was assigned to is deleted 3 days after its deadline (the number of days is a client setting).</li>
+  <li class="muted">Automatic: a tender still in New that nobody was assigned to is deleted 3 days after its deadline (the number of days is a client setting). Watchlist tenders are never deleted automatically.</li>
 </ul>
 </div>
 
@@ -419,6 +419,7 @@
     <tr><td>23 Nov 2026</td><td>
       First edition of this guide. It covers these recent improvements:
       <ul style="margin-top:3pt">
+        <li>Watchlist tenders are no longer deleted automatically after their deadline; only unassigned tenders still in New are cleaned up.</li>
         <li>Agent locked once a tender has a result (Won, Lost, Assigned to engineer, Completed, Not fit, Not bidded).</li>
         <li>Assigned to engineer and Completed lists: View only; bid deadline shown as a plain date after the win.</li>
         <li>Tender lists name the bid owner "Assigned Agent".</li>

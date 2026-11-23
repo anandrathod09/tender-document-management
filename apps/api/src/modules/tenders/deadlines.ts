@@ -1,5 +1,5 @@
 import { and, between, eq, gte, inArray, isNotNull, isNull, lt } from 'drizzle-orm'
-import { DEADLINE_BOUND_TYPES } from '@tdm/shared'
+import { DEADLINE_BOUND_TYPES, DEFAULT_CLEANUP_DAYS } from '@tdm/shared'
 import { db } from '../../db/client'
 import { orgWhere } from '../../db/scope'
 import {
@@ -16,9 +16,6 @@ import { registerJob } from '../jobs/queue'
 import { notify } from '../notifications/service'
 import { getStageByRole } from '../workflow/service'
 
-/** Days after the deadline before an unassigned open tender is deleted (client setting). */
-const DEFAULT_CLEANUP_DAYS = 3
-
 export interface SweepResult {
   missedDeadline: number
   deleted: number
@@ -28,7 +25,8 @@ export interface SweepResult {
  * Daily deadline rules for one client, using the client's own "today":
  *  1. Tenders still being prepared or reviewed after their deadline move to
  *     the missed-deadline stage ("Not bidded"); their stage is remembered.
- *  2. Open, unassigned tenders are deleted a few days after their deadline.
+ *  2. Tenders still in New with nobody assigned are deleted a few days after
+ *     their deadline. Watchlist tenders are kept: someone chose to watch them.
  */
 export async function sweepOrganization(
   orgId: string,
@@ -87,7 +85,7 @@ export async function sweepOrganization(
         orgWhere(
           tenders,
           orgId,
-          eq(workflowStages.type, 'open'),
+          eq(workflowStages.systemRole, 'intake'),
           isNull(tenders.assignedAgentId),
           lt(tenders.deadline, addDays(today, -cleanupDays)),
         ),

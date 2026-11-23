@@ -247,6 +247,7 @@ Other rules:
 
 - **Assigning** a tender in New, Watchlist or Rejected moves it to Assigned. It is not limited by the lists above.
 - **Deadline:** once a tender still being prepared or reviewed is past its deadline day, the only move left is "Not bidded". The daily job also moves such tenders there. If an admin then reopens it (moves it out of Not bidded), the deadline rule no longer applies to it.
+- **Cleanup:** a tender still in New with nobody assigned is deleted a few days after its deadline (3 by default, client setting `expiredCleanupDays`). Watchlist tenders are never deleted automatically.
 - **Agent lock:** once a tender has a result (Won, Lost, Assigned to engineer, Completed, Not fit, Not bidded), its agent can no longer be changed, so agent reports keep each result. Rejected tenders can still be assigned (that brings them back), and moving a tender back to an earlier stage unlocks it.
 - **Deadline reminders:** the person a bid is assigned to gets an in-app notification when a tender still being prepared or reviewed is due in 2 days, and again on the deadline day. Each reminder is sent once per deadline, so an extended deadline is reminded about again.
 - **Your own stages** start with no agent moves and "any stage" for admins. Add them to the lists of the stages around them.
@@ -396,6 +397,12 @@ npm run migrate:tms -- --source <old db name> --slug <subdomain> --name "Client 
 ```
 
 What it carries over: users (with their existing passwords; "client" buyer logins are left out), the three built-in bidding companies with their logos and signatures, every tender with its stage, assignment, award and a history rebuilt from the old notes, installation reports with their consignees and units, the document library, and compliance PDFs uploaded in the old system. Users who never set a password come across as "invited": send them an invitation from Users.
+
+The move also tidies the old data:
+
+- Tenders still in New with nobody assigned and more than 3 days past their deadline are left out and listed in the summary, because the daily cleanup would delete them on the first day.
+- Notes the old system wrote by itself ("Automatically marked as expired on …") and form hints saved as notes ("Status Change Notes \*") are dropped.
+- Uploaded files keep their original upload date.
 
 Suggested order on the day: put the old TMS in read-only mode, back up both databases, run the dry run, check the summary with the client, run the real migration, then let the client check their data on the new subdomain. Keep the old TMS read-only for 30 days as a fallback.
 

@@ -63,11 +63,13 @@ async function buildSourceDb() {
        wonNotes, wonAt, rejectionComment, rejectedAt, agentNotes, assignedToEngineer, engineerStatus, createdAt, updatedAt) VALUES
       (?, '901', 'GEM/2026/B/1', 'Supply of laptops', 3200000, '2026-03-10', 'Indian Railways', 64000, 'NA', 'GeM', 'won', 'won',
        NULL, ?, '2026-02-01', NULL, 3100000, 'PO-77', 'Rates are fine', '2026-02-05', ?, 'Won at L1', '2026-03-20', NULL, NULL,
-       'Automatically marked as expired', ?, 'site-visit', '2026-01-20', '2026-03-20'),
+       'Tender work is in progress | Automatically marked as expired on 2026-03-11T10:00:00.000Z', ?, 'site-visit', '2026-01-20', '2026-03-20'),
       (?, '902', 'PWD/2', 'Road work', 100000, '2026-03-01', 'PWD', 0, NULL, 'Non-GeM', 'expired', 'not-bidded',
        'price-review', ?, '2026-02-01', NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-01-21', '2026-03-02'),
       (?, '903', 'PWD/3', 'Painting', 5000, '2026-03-01', 'PWD', 0, NULL, 'Non-GeM', 'rejected', 'new',
-       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Not our line of work', '2026-01-25', NULL, NULL, NULL, '2026-01-22', '2026-01-25')`,
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 'Not our line of work', '2026-01-25', NULL, NULL, NULL, '2026-01-22', '2026-01-25'),
+      (UUID(), '904', 'PWD/4', 'Old tender nobody took', 9000, '2026-02-01', 'PWD', 0, NULL, 'Non-GeM', 'duplicate', 'new',
+       NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, '2026-01-10', '2026-01-10')`,
     [
       ids.wonTender,
       ids.agent,
@@ -152,6 +154,8 @@ describe('migration from the original TMS', () => {
     expect(r).toMatchObject({
       dryRun: true,
       tenders: 3,
+      // Still New, nobody assigned, long past the deadline: the daily cleanup would delete it.
+      staleSkipped: ['PWD/4 (deadline 2026-02-01)'],
       users: { migrated: 3, invited: 1, skipped: 1 },
       companies: 1,
     })
@@ -208,15 +212,14 @@ describe('migration from the original TMS', () => {
     const comments = won.history.map((h) => h.comment)
     expect(comments.at(-1)).toBe('Added in the previous system')
     expect(comments).toContain('Rates are fine')
-    expect(comments).toContain('Won at L1')
     expect(won.history.find((h) => h.comment === 'Rates are fine')!.changedBy).toEqual({
       id: ids.admin,
       name: 'Asha Patil',
     })
-    // The old automatic note is kept, but not presented as a stage of its own.
-    expect(comments[0]).toBe(
-      'Carried over from the previous system. Notes: Automatically marked as expired',
-    )
+    // General notes join the note of the step that reached the stage, without the old
+    // system's automatic "marked as expired" text.
+    expect(comments[0]).toBe(['Won at L1', 'Other notes: Tender work is in progress'].join('\n'))
+    expect(comments.join(' ')).not.toContain('Automatically marked')
 
     const report = (
       await request(app)

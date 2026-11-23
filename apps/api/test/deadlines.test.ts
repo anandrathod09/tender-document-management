@@ -64,10 +64,12 @@ describe('daily deadline rules', () => {
     expect(row!.previousStageId).toBe(stages['price-review']!.id)
   })
 
-  it('deletes open, unassigned tenders a few days after the deadline', async () => {
-    const { set } = await setup()
+  it('deletes New, unassigned tenders a few days after the deadline, but keeps the Watchlist', async () => {
+    const { stages, set } = await setup()
     await set('A/1', { deadline: inDays(-4) }) // past the 3-day grace: deleted
     await set('A/2', { deadline: inDays(-2) }) // within grace: kept
+    // Watchlist tenders are kept: someone chose to watch them.
+    await set('A/3', { stageId: stages.watchlist!.id, deadline: inDays(-30) })
 
     const result = await sweepOrganization(orgId, 'Asia/Kolkata', 3)
     expect(result.deleted).toBe(1)

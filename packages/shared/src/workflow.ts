@@ -28,6 +28,12 @@ export const STAGE_TYPE_LABELS: Record<StageType, string> = {
   closed: 'Closed',
 }
 
+/**
+ * Days after the deadline before a tender still in New, with nobody assigned, is
+ * deleted by the daily cleanup (a client setting, this is the default).
+ */
+export const DEFAULT_CLEANUP_DAYS = 3
+
 /** Stage types whose tenders move to the missed-deadline stage when the deadline passes. */
 export const DEADLINE_BOUND_TYPES: readonly StageType[] = ['preparing', 'review']
 
