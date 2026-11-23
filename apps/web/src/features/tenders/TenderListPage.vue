@@ -227,8 +227,11 @@ const refParts = (ref: string) => ref.split(/(?<=\/)/)
 
 const recentlyUpdated = (iso: string | null) =>
   !!iso && Date.now() - Date.parse(iso) < 7 * 86_400_000
+// After the win the bid deadline no longer matters: show the date plainly, without "Expired".
+const pastBidding = (t: TenderSummary) => ['won', 'execution', 'closed'].includes(t.stage.type)
 const expiredInView = computed(
-  () => (page.value?.items ?? []).filter((t) => daysUntil(t.deadline) < 0).length,
+  () =>
+    (page.value?.items ?? []).filter((t) => !pastBidding(t) && daysUntil(t.deadline) < 0).length,
 )
 
 // ---------------------------------------------------------------------------
@@ -469,7 +472,7 @@ onBeforeUnmount(() => {
         </template>
 
         <template #cell-deadline="{ row }">
-          <DeadlineCell :deadline="row.deadline" />
+          <DeadlineCell :deadline="row.deadline" :muted="pastBidding(row)" />
         </template>
 
         <template #cell-sheetType="{ row }">
