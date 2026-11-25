@@ -3,7 +3,11 @@ import request from 'supertest'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { db } from '../src/db/client'
 import { tenders } from '../src/db/schema'
-import { remindDeadlines, sweepOrganization } from '../src/modules/tenders/deadlines'
+import {
+  remindDeadlines,
+  sweepAllOrganizations,
+  sweepOrganization,
+} from '../src/modules/tenders/deadlines'
 import {
   app,
   bearer,
@@ -78,6 +82,42 @@ describe('daily deadline rules', () => {
       'A/3',
       'A/4',
     ])
+  })
+
+  it('the admin chooses how many days, or turns the cleanup off', async () => {
+    const { set } = await setup()
+    await set('A/1', { deadline: inDays(-5) })
+    await set('A/2', { deadline: inDays(-10) })
+    const settings = (body: object, token = adminToken) =>
+      request(app).patch('/api/workspace/settings').set('Host', ACME).set(bearer(token)).send(body)
+    const refs = async () =>
+      (await listAll(ACME, adminToken)).items.map((t) => t.referenceNo).sort()
+
+    // Only admins, and only 1 to 90 whole days.
+    const agent = await addUser(ACME, adminToken, 'agent', 'bids@acme.test')
+    expect((await settings({ cleanupDays: 7 }, agent.token)).status).toBe(403)
+    expect((await settings({ cleanupDays: 0 })).status).toBe(400)
+    expect((await settings({ cleanupDays: 91 })).status).toBe(400)
+
+    // 7 days: only the tender 10 days past its deadline goes.
+    expect((await settings({ cleanupDays: 7 })).body.cleanupDays).toBe(7)
+    await sweepAllOrganizations()
+    expect(await refs()).toEqual(['A/1', 'A/3', 'A/4'])
+
+    // Off: nothing is deleted, however old.
+    expect((await settings({ cleanupDays: null })).body.cleanupDays).toBeNull()
+    await set('A/1', { deadline: inDays(-60) })
+    await sweepAllOrganizations()
+    expect(await refs()).toEqual(['A/1', 'A/3', 'A/4'])
+    const read = await request(app)
+      .get('/api/workspace/settings')
+      .set('Host', ACME)
+      .set(bearer(adminToken))
+    expect(read.body.cleanupDays).toBeNull()
+
+    // Changing other settings keeps the choice.
+    await settings({ agentsSeeAssets: true })
+    expect((await settings({ agentsSeeAssets: false })).body.cleanupDays).toBeNull()
   })
 
   it("uses the client's own date: late evening in India is already the next day", async () => {

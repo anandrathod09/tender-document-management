@@ -247,7 +247,7 @@ Other rules:
 
 - **Assigning** a tender in New, Watchlist or Rejected moves it to Assigned. It is not limited by the lists above.
 - **Deadline:** once a tender still being prepared or reviewed is past its deadline day, the only move left is "Not bidded". The daily job also moves such tenders there. If an admin then reopens it (moves it out of Not bidded), the deadline rule no longer applies to it.
-- **Cleanup:** a tender still in New with nobody assigned is deleted a few days after its deadline (3 by default, client setting `expiredCleanupDays`). Watchlist tenders are never deleted automatically.
+- **Cleanup:** a tender still in New with nobody assigned is deleted a few days after its deadline: 3 by default; admins can set 1–90 days or turn it off on Workflow stages → Automatic Cleanup (saved as `expiredCleanupDays` in the client's settings, `null` = off). Watchlist tenders are never deleted automatically.
 - **Agent lock:** once a tender has a result (Won, Lost, Assigned to engineer, Completed, Not fit, Not bidded), its agent can no longer be changed, so agent reports keep each result. Rejected tenders can still be assigned (that brings them back), and moving a tender back to an earlier stage unlocks it.
 - **Deadline reminders:** the person a bid is assigned to gets an in-app notification when a tender still being prepared or reviewed is due in 2 days, and again on the deadline day. Each reminder is sent once per deadline, so an extended deadline is reminded about again.
 - **Your own stages** start with no agent moves and "any stage" for admins. Add them to the lists of the stages around them.

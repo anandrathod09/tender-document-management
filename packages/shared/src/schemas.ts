@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   COMMENT_MODES,
+  MAX_CLEANUP_DAYS,
   STAGE_COLORS,
   STAGE_LABEL_MAX,
   STAGE_TYPES,
@@ -38,7 +39,17 @@ export const twoFactorLoginSchema = z.object({
 export const twoFactorCodeSchema = z.object({ code: twoFactorCode })
 export const disableTwoFactorSchema = z.object({ password: z.string().min(1).max(200) })
 export const workspaceSettingsSchema = z
-  .object({ requireTwoFactor: z.boolean(), agentsSeeAssets: z.boolean() })
+  .object({
+    requireTwoFactor: z.boolean(),
+    agentsSeeAssets: z.boolean(),
+    // null turns the cleanup off.
+    cleanupDays: z
+      .number()
+      .int('Enter whole days')
+      .min(1, 'At least 1 day')
+      .max(MAX_CLEANUP_DAYS, `At most ${MAX_CLEANUP_DAYS} days`)
+      .nullable(),
+  })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update')
 export type WorkspaceSettingsInput = z.infer<typeof workspaceSettingsSchema>

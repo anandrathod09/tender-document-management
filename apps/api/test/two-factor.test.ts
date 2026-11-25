@@ -161,6 +161,7 @@ describe('two-step login', () => {
     expect((await admin.patch('/workspace/settings', { requireTwoFactor: true })).body).toEqual({
       requireTwoFactor: true,
       agentsSeeAssets: false,
+      cleanupDays: 3,
     })
 
     // Someone without it can sign in, but only reach the setup.

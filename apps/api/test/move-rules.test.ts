@@ -155,7 +155,7 @@ describe('stage move rules', () => {
       .set('Host', ACME)
       .set(bearer(adminToken))
       .send({ agentsSeeAssets: true })
-    expect(on.body).toEqual({ requireTwoFactor: false, agentsSeeAssets: true })
+    expect(on.body).toEqual({ requireTwoFactor: false, agentsSeeAssets: true, cleanupDays: 3 })
     expect((await assets(agent.token)).status).toBe(200)
 
     await request(app)

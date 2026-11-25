@@ -78,6 +78,8 @@ export interface WorkspaceSettings {
   requireTwoFactor: boolean
   /** Agents see the Installed assets page (off by default). */
   agentsSeeAssets: boolean
+  /** Days after the deadline before an unassigned New tender is deleted; null = never. */
+  cleanupDays: number | null
 }
 
 export interface PlanSummary {

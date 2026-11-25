@@ -33,6 +33,20 @@ export const STAGE_TYPE_LABELS: Record<StageType, string> = {
  * deleted by the daily cleanup (a client setting, this is the default).
  */
 export const DEFAULT_CLEANUP_DAYS = 3
+export const MAX_CLEANUP_DAYS = 90
+
+/**
+ * The client's cleanup days from their saved settings: a number, or null when
+ * the cleanup is turned off. Nothing saved means the default.
+ */
+export function cleanupDaysFrom(
+  settings: Record<string, unknown> | null | undefined,
+): number | null {
+  const v = settings?.expiredCleanupDays
+  if (v === null) return null
+  const days = Number(v ?? DEFAULT_CLEANUP_DAYS)
+  return Number.isInteger(days) && days >= 1 ? days : DEFAULT_CLEANUP_DAYS
+}
 
 /** Stage types whose tenders move to the missed-deadline stage when the deadline passes. */
 export const DEADLINE_BOUND_TYPES: readonly StageType[] = ['preparing', 'review']

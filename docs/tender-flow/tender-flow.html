@@ -90,7 +90,7 @@
     </ol>
   </div>
   <div class="meta">
-    Last updated <strong>23 November 2026</strong>. Describes the default stages; a client can rename stages, add its own, and change who may move where (Manage → Workflow stages). The rules follow each stage's kind, so they keep working after a rename.
+    Last updated <strong>25 November 2026</strong>. Describes the default stages; a client can rename stages, add its own, and change who may move where (Manage → Workflow stages). The rules follow each stage's kind, so they keep working after a rename.
   </div>
 </section>
 
@@ -228,7 +228,7 @@
   <li><strong>Add to Watchlist</strong> <span class="chip c-indigo">Watchlist</span> for tenders worth keeping an eye on; <strong>Remove from Watchlist</strong> sends them back to New.</li>
   <li><strong>Reject</strong> <span class="chip c-red">Rejected</span> for tenders the company will not bid on. A reason is required.</li>
   <li>Several tenders can be ticked and handled at once.</li>
-  <li class="muted">Automatic: a tender still in New that nobody was assigned to is deleted 3 days after its deadline (the number of days is a client setting). Watchlist tenders are never deleted automatically.</li>
+  <li class="muted">Automatic: a tender still in New that nobody was assigned to is deleted 3 days after its deadline. An admin can choose a different number of days (1 to 90) or turn this off under Manage → Workflow stages → Automatic Cleanup. Watchlist tenders are never deleted automatically.</li>
 </ul>
 </div>
 
@@ -416,6 +416,7 @@
 <table>
   <thead><tr><th style="width:22%">Date</th><th>Change</th></tr></thead>
   <tbody>
+    <tr><td>25 Nov 2026</td><td>Admins choose how many days after the deadline unassigned New tenders are deleted, or turn this off (Manage → Workflow stages → Automatic Cleanup).</td></tr>
     <tr><td>23 Nov 2026</td><td>
       First edition of this guide. It covers these recent improvements:
       <ul style="margin-top:3pt">

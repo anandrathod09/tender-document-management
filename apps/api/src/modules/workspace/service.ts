@@ -1,5 +1,6 @@
 import { eq } from 'drizzle-orm'
 import {
+  cleanupDaysFrom,
   PERMISSIONS,
   RESERVED_SUBDOMAINS,
   type WorkspaceSettings,
@@ -78,6 +79,7 @@ export async function getWorkspaceSettings(org: Organization): Promise<Workspace
   return {
     requireTwoFactor: org.requireTwoFactor,
     agentsSeeAssets: agent?.permissions.includes(PERMISSIONS.ASSET_VIEW) ?? false,
+    cleanupDays: cleanupDaysFrom(org.settings),
   }
 }
 
@@ -110,6 +112,17 @@ export async function updateWorkspaceSettings(
           .set({ permissions: input.agentsSeeAssets ? [...rest, PERMISSIONS.ASSET_VIEW] : rest })
           .where(orgWhere(roles, auth.org.id, eq(roles.id, agent.id)))
       }
+    }
+    // Days before unassigned New tenders are deleted, kept with the client's other settings.
+    if (input.cleanupDays !== undefined) {
+      const [current] = await tx
+        .select({ settings: organizations.settings })
+        .from(organizations)
+        .where(eq(organizations.id, auth.org.id))
+      await tx
+        .update(organizations)
+        .set({ settings: { ...current?.settings, expiredCleanupDays: input.cleanupDays } })
+        .where(eq(organizations.id, auth.org.id))
     }
     await writeAudit(tx, {
       organizationId: auth.org.id,

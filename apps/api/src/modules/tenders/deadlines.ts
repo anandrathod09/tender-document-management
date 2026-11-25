@@ -1,5 +1,5 @@
 import { and, between, eq, gte, inArray, isNotNull, isNull, lt } from 'drizzle-orm'
-import { DEADLINE_BOUND_TYPES, DEFAULT_CLEANUP_DAYS } from '@tdm/shared'
+import { cleanupDaysFrom, DEADLINE_BOUND_TYPES } from '@tdm/shared'
 import { db } from '../../db/client'
 import { orgWhere } from '../../db/scope'
 import {
@@ -25,13 +25,14 @@ export interface SweepResult {
  * Daily deadline rules for one client, using the client's own "today":
  *  1. Tenders still being prepared or reviewed after their deadline move to
  *     the missed-deadline stage ("Not bidded"); their stage is remembered.
- *  2. Tenders still in New with nobody assigned are deleted a few days after
- *     their deadline. Watchlist tenders are kept: someone chose to watch them.
+ *  2. Tenders still in New with nobody assigned are deleted `cleanupDays` days
+ *     after their deadline (null = the client turned this off). Watchlist
+ *     tenders are kept: someone chose to watch them.
  */
 export async function sweepOrganization(
   orgId: string,
   timezone: string,
-  cleanupDays: number,
+  cleanupDays: number | null,
   now = new Date(),
 ): Promise<SweepResult> {
   const today = todayIn(timezone, now)
@@ -77,19 +78,22 @@ export async function sweepOrganization(
       )
     }
 
-    const stale = await tx
-      .select({ id: tenders.id })
-      .from(tenders)
-      .innerJoin(workflowStages, eq(workflowStages.id, tenders.stageId))
-      .where(
-        orgWhere(
-          tenders,
-          orgId,
-          eq(workflowStages.systemRole, 'intake'),
-          isNull(tenders.assignedAgentId),
-          lt(tenders.deadline, addDays(today, -cleanupDays)),
-        ),
-      )
+    const stale =
+      cleanupDays === null
+        ? []
+        : await tx
+            .select({ id: tenders.id })
+            .from(tenders)
+            .innerJoin(workflowStages, eq(workflowStages.id, tenders.stageId))
+            .where(
+              orgWhere(
+                tenders,
+                orgId,
+                eq(workflowStages.systemRole, 'intake'),
+                isNull(tenders.assignedAgentId),
+                lt(tenders.deadline, addDays(today, -cleanupDays)),
+              ),
+            )
     if (stale.length) {
       await tx.delete(tenders).where(
         orgWhere(
@@ -212,14 +216,8 @@ export async function sweepAllOrganizations(now = new Date()): Promise<void> {
     .from(organizations)
     .where(and(inArray(organizations.status, ['trial', 'active'])))
   for (const org of orgs) {
-    const days = Number(org.settings?.expiredCleanupDays ?? DEFAULT_CLEANUP_DAYS)
     try {
-      const r = await sweepOrganization(
-        org.id,
-        org.timezone,
-        Number.isFinite(days) ? days : DEFAULT_CLEANUP_DAYS,
-        now,
-      )
+      const r = await sweepOrganization(org.id, org.timezone, cleanupDaysFrom(org.settings), now)
       const reminded = await remindDeadlines(org.id, org.timezone, now)
       if (r.missedDeadline || r.deleted || reminded) {
         logger.info({ orgId: org.id, ...r, reminded }, 'Deadline sweep')

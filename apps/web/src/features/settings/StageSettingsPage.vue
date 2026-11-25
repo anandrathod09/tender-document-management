@@ -17,6 +17,7 @@ import { api, errorMessage } from '@/services/api'
 import { useWorkflowStore } from '@/stores/workflow'
 import { stageDotClasses } from '@/utils/tenders'
 import AddStageDialog from './AddStageDialog.vue'
+import CleanupSettingCard from './CleanupSettingCard.vue'
 import MenuRolesDialog from './MenuRolesDialog.vue'
 import MoveRulesDialog from './MoveRulesDialog.vue'
 import ResetWorkflowDialog from './ResetWorkflowDialog.vue'
@@ -378,6 +379,8 @@ const indexOf = (s: StageSummary) => workflow.stages.findIndex((x) => x.id === s
       choose; “In menu for” is who sees the stage in their sidebar. Click either to change it, or
       use Reset to Default to put things back.
     </p>
+
+    <CleanupSettingCard class="mt-6" />
 
     <MenuRolesDialog
       :open="!!editingMenu"
