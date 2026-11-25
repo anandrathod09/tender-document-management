@@ -40,6 +40,9 @@ const engineerView =
   !auth.can(PERMISSIONS.TENDER_VIEW_ALL) &&
   !auth.can(PERMISSIONS.TENDER_MOVE_STAGE)
 
+// The admin can hide installation reports from agents (Settings).
+const seesInstallation = auth.seesInstallation()
+
 const tender = ref<TenderDetail | null>(null)
 const loadError = ref('')
 const refreshing = ref(false)
@@ -287,7 +290,11 @@ const heading = 'text-sm font-semibold tracking-wider text-gray-700 uppercase da
             :companies="companies"
             :tender-docs="tenderDocs"
           />
-          <InstallationReportView v-if="afterWin" :key="tender.stage.id" :tender="tender" />
+          <InstallationReportView
+            v-if="afterWin && seesInstallation"
+            :key="tender.stage.id"
+            :tender="tender"
+          />
         </div>
 
         <!-- Right: who has it, where it is, what happened -->

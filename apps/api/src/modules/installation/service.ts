@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { and, asc, desc, eq, gt, inArray, isNull, ne } from 'drizzle-orm'
 import {
+  canSeeInstallation,
   consigneeWorkSchema,
   installationReportSchema,
   isBlankUnit,
@@ -56,6 +57,9 @@ export async function getReport(
   auth: TenantAuth,
   tenderId: string,
 ): Promise<InstallationReport | null> {
+  if (!canSeeInstallation(auth.permissions)) {
+    throw forbidden('INSTALLATION_HIDDEN', 'Installation reports are not shown to your role')
+  }
   const tender = await getVisibleTender(conn, auth, tenderId)
   const orgId = auth.org.id
   const ownOnly = ownConsigneesOnly(auth)

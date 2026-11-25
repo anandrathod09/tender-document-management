@@ -42,6 +42,7 @@ export const workspaceSettingsSchema = z
   .object({
     requireTwoFactor: z.boolean(),
     agentsSeeAssets: z.boolean(),
+    agentsSeeInstallation: z.boolean(),
     // null turns the cleanup off.
     cleanupDays: z
       .number()

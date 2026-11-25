@@ -176,10 +176,13 @@ const showStageComment = computed(() => stage.value?.type === 'closed')
 const viewOnly = computed(() => ['execution', 'closed'].includes(stage.value?.type ?? ''))
 
 // After the win, the old "Engineer Tenders" columns: each consignee and its engineer.
+// Hidden when the admin keeps installation reports from agents (Settings).
+const seesInstallation = auth.seesInstallation()
 const showInstallation = computed(
   () =>
-    ['won', 'execution', 'closed'].includes(stage.value?.type ?? '') ||
-    (page.value?.items ?? []).some((t) => t.consignees.length),
+    seesInstallation &&
+    (['won', 'execution', 'closed'].includes(stage.value?.type ?? '') ||
+      (page.value?.items ?? []).some((t) => t.consignees.length)),
 )
 
 const columns = computed<TableColumn[]>(() => [

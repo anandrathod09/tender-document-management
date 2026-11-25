@@ -202,11 +202,11 @@
     <tr><td>Watchlist, reject, assign agents</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td><td class="no">No</td></tr>
     <tr><td>Move to another stage</td><td class="yes">Yes, by the move rules</td><td>Their own tenders, by the move rules</td><td class="no">No</td><td class="no">No</td></tr>
     <tr><td>Tender documents and compliance letters</td><td class="yes">Yes</td><td>On their tenders</td><td>Documents on their tenders</td><td>Open and download</td></tr>
-    <tr><td>Installation report</td><td class="yes">Sets up and edits everything</td><td class="no">No</td><td>Fills rows on their own consignees</td><td>Read only</td></tr>
-    <tr><td>Installed assets</td><td class="yes">Yes</td><td>Hidden unless the admin turns it on</td><td>Their own units</td><td>Yes</td></tr>
+    <tr><td>Installation report</td><td class="yes">Sets up and edits everything</td><td>Read only on their tenders; the admin can hide it (Manage → Settings)</td><td>Fills rows on their own consignees</td><td>Read only</td></tr>
+    <tr><td>Installed assets</td><td class="yes">Yes</td><td>Hidden unless the admin turns it on (Manage → Settings)</td><td>Their own units</td><td>Yes</td></tr>
     <tr><td>Service tickets</td><td class="yes">Yes</td><td class="no">No</td><td class="yes">Yes</td><td class="no">No</td></tr>
     <tr><td>Reports</td><td class="yes">Yes</td><td>Their own tenders</td><td class="no">No</td><td class="yes">Yes</td></tr>
-    <tr><td>Settings (users, stages, companies, letters, billing)</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td><td class="no">No</td></tr>
+    <tr><td>Manage pages (settings, users, stages, companies, letters, billing)</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td><td class="no">No</td></tr>
   </tbody>
 </table>
 <p class="small muted">Every person has their own login. The admin invites them on the Users page and picks their role. Engineers must have a phone number.</p>
@@ -228,7 +228,7 @@
   <li><strong>Add to Watchlist</strong> <span class="chip c-indigo">Watchlist</span> for tenders worth keeping an eye on; <strong>Remove from Watchlist</strong> sends them back to New.</li>
   <li><strong>Reject</strong> <span class="chip c-red">Rejected</span> for tenders the company will not bid on. A reason is required.</li>
   <li>Several tenders can be ticked and handled at once.</li>
-  <li class="muted">Automatic: a tender still in New that nobody was assigned to is deleted 3 days after its deadline. An admin can choose a different number of days (1 to 90) or turn this off under Manage → Workflow stages → Automatic Cleanup. Watchlist tenders are never deleted automatically.</li>
+  <li class="muted">Automatic: a tender still in New that nobody was assigned to is deleted 3 days after its deadline. An admin can choose a different number of days (1 to 90) or turn this off under Manage → Settings. Watchlist tenders are never deleted automatically.</li>
 </ul>
 </div>
 
@@ -416,7 +416,7 @@
 <table>
   <thead><tr><th style="width:22%">Date</th><th>Change</th></tr></thead>
   <tbody>
-    <tr><td>25 Nov 2026</td><td>Admins choose how many days after the deadline unassigned New tenders are deleted, or turn this off (Manage → Workflow stages → Automatic Cleanup).</td></tr>
+    <tr><td>25 Nov 2026</td><td>New <strong>Manage → Settings</strong> page with the company-wide switches: require two-step login, what agents see (Installed assets; installation report, shown by default and now possible to hide), and the automatic cleanup, where admins choose how many days after the deadline unassigned New tenders are deleted, or turn it off.</td></tr>
     <tr><td>23 Nov 2026</td><td>
       First edition of this guide. It covers these recent improvements:
       <ul style="margin-top:3pt">

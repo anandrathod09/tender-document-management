@@ -86,6 +86,11 @@ function tenantRoutes(): RouteRecordRaw[] {
           meta: { title: 'Workflow stages', permission: PERMISSIONS.WORKFLOW_MANAGE },
         },
         {
+          path: 'settings/general',
+          component: () => import('@/features/settings/WorkspaceSettingsPage.vue'),
+          meta: { title: 'Settings', permission: PERMISSIONS.SETTINGS_MANAGE },
+        },
+        {
           path: 'settings/companies',
           component: () => import('@/features/companies/CompaniesPage.vue'),
           meta: { title: 'Bidding companies', permission: PERMISSIONS.COMPANY_MANAGE },

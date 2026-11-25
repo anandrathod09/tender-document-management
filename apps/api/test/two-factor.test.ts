@@ -161,6 +161,7 @@ describe('two-step login', () => {
     expect((await admin.patch('/workspace/settings', { requireTwoFactor: true })).body).toEqual({
       requireTwoFactor: true,
       agentsSeeAssets: false,
+      agentsSeeInstallation: true,
       cleanupDays: 3,
     })
 

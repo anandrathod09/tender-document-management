@@ -44,50 +44,15 @@ const togglingBusy = ref(false)
 const resetting = ref<UserSummary | null>(null)
 const resettingBusy = ref(false)
 
-// "Require two-step login for everyone" (workspace setting).
+// Whether two-step login is required (changed on the Settings page), for the reset message.
 const canSettings = auth.can(PERMISSIONS.SETTINGS_MANAGE)
 const settings = ref<WorkspaceSettings | null>(null)
-const savingSettings = ref(false)
 async function loadSettings() {
   if (!canSettings) return
   try {
     settings.value = (await api.get<WorkspaceSettings>('/workspace/settings')).data
   } catch {
     // Not critical for the user list.
-  }
-}
-async function setRequireTwoFactor(on: boolean) {
-  actionError.value = ''
-  notice.value = ''
-  savingSettings.value = true
-  try {
-    settings.value = (
-      await api.patch<WorkspaceSettings>('/workspace/settings', { requireTwoFactor: on })
-    ).data
-    notice.value = on
-      ? 'Two-step login is now required. People without it will be asked to set it up when they next use the app.'
-      : 'Two-step login is no longer required.'
-  } catch (err) {
-    actionError.value = errorMessage(err)
-  } finally {
-    savingSettings.value = false
-  }
-}
-async function setAgentsSeeAssets(on: boolean) {
-  actionError.value = ''
-  notice.value = ''
-  savingSettings.value = true
-  try {
-    settings.value = (
-      await api.patch<WorkspaceSettings>('/workspace/settings', { agentsSeeAssets: on })
-    ).data
-    notice.value = on
-      ? 'Agents can now see Installed assets (after they reload the page).'
-      : 'Installed assets is now hidden from agents.'
-  } catch (err) {
-    actionError.value = errorMessage(err)
-  } finally {
-    savingSettings.value = false
   }
 }
 const twoFactorCount = computed(() => users.value.filter((u) => u.twoFactorEnabled).length)
@@ -302,58 +267,6 @@ async function confirmToggle() {
         <UiButton size="xs" variant="ghost" :disabled="!filtering" @click="clearFilters">
           Clear Filters
         </UiButton>
-        <label
-          v-if="settings"
-          class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
-          v-tooltip.wide="'Everyone must use an authenticator app code when signing in'"
-        >
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="settings.requireTwoFactor"
-            :disabled="savingSettings"
-            :class="[
-              'relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50',
-              settings.requireTwoFactor ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-700',
-            ]"
-            @click="setRequireTwoFactor(!settings.requireTwoFactor)"
-          >
-            <span
-              :class="[
-                'absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow-theme-sm transition-transform',
-                settings.requireTwoFactor && 'translate-x-5',
-              ]"
-            />
-          </button>
-          Require 2-step login
-        </label>
-        <label
-          v-if="settings"
-          class="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300"
-          v-tooltip.wide="
-            'Show the Installed assets page to users with the Agent role. Off by default.'
-          "
-        >
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="settings.agentsSeeAssets"
-            :disabled="savingSettings"
-            :class="[
-              'relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50',
-              settings.agentsSeeAssets ? 'bg-blue-500' : 'bg-gray-300 dark:bg-gray-700',
-            ]"
-            @click="setAgentsSeeAssets(!settings.agentsSeeAssets)"
-          >
-            <span
-              :class="[
-                'absolute top-0.5 left-0.5 size-5 rounded-full bg-white shadow-theme-sm transition-transform',
-                settings.agentsSeeAssets && 'translate-x-5',
-              ]"
-            />
-          </button>
-          Agents see Installed assets
-        </label>
         <UiButton size="xs" :disabled="!roles.length" @click="inviteOpen = true">
           <UserPlus class="size-4" aria-hidden="true" /> Add User
         </UiButton>

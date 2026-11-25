@@ -79,6 +79,7 @@ export async function getWorkspaceSettings(org: Organization): Promise<Workspace
   return {
     requireTwoFactor: org.requireTwoFactor,
     agentsSeeAssets: agent?.permissions.includes(PERMISSIONS.ASSET_VIEW) ?? false,
+    agentsSeeInstallation: agent?.permissions.includes(PERMISSIONS.INSTALLATION_VIEW) ?? false,
     cleanupDays: cleanupDaysFrom(org.settings),
   }
 }
@@ -102,14 +103,23 @@ export async function updateWorkspaceSettings(
         .set({ requireTwoFactor: input.requireTwoFactor })
         .where(eq(organizations.id, auth.org.id))
     }
-    // The Agent role gains or loses "see Installed assets".
-    if (input.agentsSeeAssets !== undefined) {
+    // The Agent role gains or loses "see Installed assets" and "see installation reports".
+    const agentSwitches = [
+      [input.agentsSeeAssets, PERMISSIONS.ASSET_VIEW],
+      [input.agentsSeeInstallation, PERMISSIONS.INSTALLATION_VIEW],
+    ] as const
+    if (agentSwitches.some(([on]) => on !== undefined)) {
       const agent = await agentRole(auth.org.id)
       if (agent) {
-        const rest = agent.permissions.filter((p) => p !== PERMISSIONS.ASSET_VIEW)
+        let permissions = agent.permissions
+        for (const [on, permission] of agentSwitches) {
+          if (on === undefined) continue
+          permissions = permissions.filter((p) => p !== permission)
+          if (on) permissions = [...permissions, permission]
+        }
         await tx
           .update(roles)
-          .set({ permissions: input.agentsSeeAssets ? [...rest, PERMISSIONS.ASSET_VIEW] : rest })
+          .set({ permissions })
           .where(orgWhere(roles, auth.org.id, eq(roles.id, agent.id)))
       }
     }

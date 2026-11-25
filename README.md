@@ -168,15 +168,22 @@ Every client starts with four roles. Each person has their own login: the admin 
 | Assign tenders, watchlist, reject                                    | yes                                                | no                                               | no                                               | no                              |
 | Upload Excel, export to Excel                                        | yes                                                | no                                               | no                                               | no                              |
 | Add documents and make compliance letters on a tender                | yes                                                | yes, on their tenders                            | documents only, on their tenders                 | no (can open and download them) |
-| Installation reports                                                 | create and edit everything                         | no                                               | their own consignees only (see below)            | read only                       |
+| Installation reports                                                 | create and edit everything                         | read only, on their tenders (can be hidden)      | their own consignees only (see below)            | read only                       |
 | Service tickets                                                      | yes                                                | no                                               | yes                                              | no                              |
 | Installed assets page                                                | yes                                                | **hidden by default** (see below)                | their own units                                  | yes                             |
 | Reports                                                              | yes                                                | yes                                              | no                                               | yes                             |
-| Users, Workflow stages, Bidding companies, Letter templates, Billing | yes                                                | no                                               | no                                               | no                              |
+| Settings, Users, Workflow stages, Companies, Letters, Billing        | yes                                                | no                                               | no                                               | no                              |
 
 **Viewer** is read only, for people who follow the bids without working on them (an owner, a director, an accountant). They see every tender, its documents, compliance PDFs, installation reports, reports and installed assets, but cannot change anything: no moving, assigning, uploading, letters or settings. The original TMS had no such role, so migrated clients simply don't use it until they add someone as a Viewer.
 
-**Installed assets for agents.** The page is hidden from agents unless the admin turns on **Agents see Installed assets** on the Users page. The switch adds or removes the `asset.view` permission on the Agent role, and agents see the change the next time they load the app.
+**Manage → Settings** (needs `settings.manage`) holds the company-wide switches, all saved through `PATCH /api/workspace/settings`:
+
+- **Require two-step login** (see below).
+- **What agents see → Installed assets:** off by default. Adds or removes `asset.view` on the Agent role.
+- **What agents see → Installation report:** on by default. Adds or removes `installation.view` on the Agent role. When off, agents get 403 `INSTALLATION_HIDDEN` for the report and its PDF, and their tender lists come without consignees. Engineers (`installation.own`) and admins are not affected.
+- **Automatic cleanup:** see [Workflow stages](#workflow-stages).
+
+Role switches take effect on the agent's next request; the menu updates when they reload the app.
 
 **Engineers work on their own consignees.** An engineer sees only the consignees where they are the engineer, on the tender page, the Installation Report page, their dashboard and Installed assets. On those consignees they can fill in the rows (serial numbers, installed yes/no, installation date, remarks), set their engineer status, and upload documents (PDF, JPG or PNG, such as the signed installation certificate or site photos). The admin sets up everything else: order details, consignees, the engineer, and the report templates with their item name, warranty and number of rows. An engineer can fill rows up to that number; to add more rows, the admin adds them.
 
@@ -247,7 +254,7 @@ Other rules:
 
 - **Assigning** a tender in New, Watchlist or Rejected moves it to Assigned. It is not limited by the lists above.
 - **Deadline:** once a tender still being prepared or reviewed is past its deadline day, the only move left is "Not bidded". The daily job also moves such tenders there. If an admin then reopens it (moves it out of Not bidded), the deadline rule no longer applies to it.
-- **Cleanup:** a tender still in New with nobody assigned is deleted a few days after its deadline: 3 by default; admins can set 1–90 days or turn it off on Workflow stages → Automatic Cleanup (saved as `expiredCleanupDays` in the client's settings, `null` = off). Watchlist tenders are never deleted automatically.
+- **Cleanup:** a tender still in New with nobody assigned is deleted a few days after its deadline: 3 by default; admins can set 1–90 days or turn it off on Manage → Settings (saved as `expiredCleanupDays` in the client's settings, `null` = off). Watchlist tenders are never deleted automatically.
 - **Agent lock:** once a tender has a result (Won, Lost, Assigned to engineer, Completed, Not fit, Not bidded), its agent can no longer be changed, so agent reports keep each result. Rejected tenders can still be assigned (that brings them back), and moving a tender back to an earlier stage unlocks it.
 - **Deadline reminders:** the person a bid is assigned to gets an in-app notification when a tender still being prepared or reviewed is due in 2 days, and again on the deadline day. Each reminder is sent once per deadline, so an extended deadline is reminded about again.
 - **Your own stages** start with no agent moves and "any stage" for admins. Add them to the lists of the stages around them.
@@ -295,10 +302,10 @@ Anyone (client users and the owner panel) can turn on two-step login under the u
 - Each code from the app is accepted once.
 - The app keys are stored encrypted with `ENCRYPTION_KEY` (`apps/api/src/lib/secrets.ts`).
 
-**Admin controls (Users page)**
+**Admin controls**
 
-- **Require 2-step login:** turns on the workspace setting `PATCH /api/workspace/settings`. The admin must have it on themselves first. Until a user sets it up, only `/api/auth/*` works for them and the app keeps them on My Security.
-- **Reset Two-Step Login:** for someone who lost their phone. It turns two-step login off for that person and signs them out.
+- **Require two-step login** (Manage → Settings): turns on the workspace setting `PATCH /api/workspace/settings`. The admin must have it on themselves first. Until a user sets it up, only `/api/auth/*` works for them and the app keeps them on My Security.
+- **Reset Two-Step Login** (Users page): for someone who lost their phone. It turns two-step login off for that person and signs them out.
 
 ## Letter templates
 

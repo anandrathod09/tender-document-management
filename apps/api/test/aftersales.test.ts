@@ -590,6 +590,50 @@ describe('installation reports, assets, tickets and reports', () => {
     ).toBe(403)
   })
 
+  it('agents see the installation report of their tender until the admin turns it off', async () => {
+    const agent = await addUser(ACME, adminToken, 'agent', 'agent@acme.test')
+    const as = (token: string, path: string) =>
+      request(app).get(`/api${path}`).set('Host', ACME).set(bearer(token))
+    const settings = (body: object) =>
+      request(app)
+        .patch('/api/workspace/settings')
+        .set('Host', ACME)
+        .set(bearer(adminToken))
+        .send(body)
+    await request(app)
+      .post(`/api/tenders/${tenderId}/assign`)
+      .set('Host', ACME)
+      .set(bearer(adminToken))
+      .send({ agentId: agent.id })
+    await win()
+    await put(report([{ itemName: 'Printer', serialNumber: 'P-1' }]))
+    const consigneesSeen = async () =>
+      (await listAll(ACME, agent.token)).items.find((t) => t.id === tenderId)!.consignees.length
+
+    // On by default: the report, its PDF and the consignee column.
+    expect((await as(agent.token, '/workspace/settings')).body.agentsSeeInstallation).toBe(true)
+    expect((await as(agent.token, `/tenders/${tenderId}/installation-report`)).status).toBe(200)
+    expect(await consigneesSeen()).toBe(1)
+
+    expect((await settings({ agentsSeeInstallation: false })).body).toMatchObject({
+      agentsSeeInstallation: false,
+      agentsSeeAssets: false,
+    })
+    const hidden = await as(agent.token, `/tenders/${tenderId}/installation-report`)
+    expect(hidden.body.error.code).toBe('INSTALLATION_HIDDEN')
+    expect((await as(agent.token, `/tenders/${tenderId}/installation-report/pdf`)).status).toBe(403)
+    expect(await consigneesSeen()).toBe(0)
+    // The engineer and the admin are not affected.
+    expect((await as(engineer.token, `/tenders/${tenderId}/installation-report`)).status).toBe(200)
+    expect((await as(adminToken, `/tenders/${tenderId}/installation-report`)).status).toBe(200)
+
+    // Switching Installed assets on keeps the report hidden.
+    await settings({ agentsSeeAssets: true })
+    expect((await as(agent.token, `/tenders/${tenderId}/installation-report`)).status).toBe(403)
+    await settings({ agentsSeeInstallation: true })
+    expect((await as(agent.token, `/tenders/${tenderId}/installation-report`)).status).toBe(200)
+  })
+
   it('reports monthly results and per-agent performance, and exports Excel files', async () => {
     const agent = await addUser(ACME, adminToken, 'agent', 'agent@acme.test')
     await request(app)

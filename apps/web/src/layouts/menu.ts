@@ -10,6 +10,7 @@ import {
   LifeBuoy,
   ListChecks,
   Rows3,
+  Settings,
   Upload,
   Users,
 } from 'lucide-vue-next'
@@ -123,6 +124,12 @@ export function tenantMenu(
           to: '/settings/stages',
           icon: ListChecks,
           permission: PERMISSIONS.WORKFLOW_MANAGE,
+        },
+        {
+          label: 'Settings',
+          to: '/settings/general',
+          icon: Settings,
+          permission: PERMISSIONS.SETTINGS_MANAGE,
         },
         {
           label: 'Billing',

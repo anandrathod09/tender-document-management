@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import type { LoginChallenge, LoginResponse, Permission, Session } from '@tdm/shared'
+import { canSeeInstallation } from '@tdm/shared/permissions'
 import { api, refreshSession, setAccessToken } from '@/services/api'
 import { useWorkflowStore } from './workflow'
 
@@ -82,6 +83,11 @@ export const useAuthStore = defineStore('auth', () => {
     return tenant.value?.permissions.includes(permission) ?? false
   }
 
+  /** Sees installation reports and consignees (the admin can hide them from agents). */
+  function seesInstallation(): boolean {
+    return canSeeInstallation({ has: (p) => can(p as Permission) })
+  }
+
   return {
     session,
     isSignedIn,
@@ -97,5 +103,6 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     clear,
     can,
+    seesInstallation,
   }
 })

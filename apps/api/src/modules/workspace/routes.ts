@@ -30,7 +30,10 @@ workspaceRouter.get('/', (req, res) => {
   res.json(info)
 })
 
-/** The client's own settings: two-step login required, agents see Installed assets, cleanup days. */
+/**
+ * The client's own settings: two-step login required, what agents see
+ * (Installed assets, installation reports), cleanup days.
+ */
 workspaceRouter.get('/settings', authenticateTenant, async (req, res) => {
   const settings: WorkspaceSettings = await getWorkspaceSettings(tenantAuth(req).org)
   res.json(settings)

@@ -17,6 +17,7 @@ import {
   agentLocked,
   allowedNextStages,
   deadlineLocked,
+  canSeeInstallation,
   PERMISSIONS,
   STAGE_TYPES,
   type Assignee,
@@ -193,7 +194,8 @@ export async function withConsignees<T extends WithConsignees>(
   auth: TenantAuth,
   items: T[],
 ): Promise<T[]> {
-  if (!items.length) return items
+  // Roles the admin hides installation reports from don't see consignees either.
+  if (!items.length || !canSeeInstallation(auth.permissions)) return items
   const engineers = alias(users, 'consignee_engineer')
   const ownOnly =
     !auth.permissions.has(PERMISSIONS.INSTALLATION_MANAGE) &&

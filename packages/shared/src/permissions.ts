@@ -31,6 +31,11 @@ export const PERMISSIONS = {
   TENDER_DOCUMENTS: 'tender.documents',
   /** See the Installed assets page. Agents don't have it unless the admin turns it on. */
   ASSET_VIEW: 'asset.view',
+  /**
+   * Read the installation report (consignees, engineers, serial numbers) of the
+   * tenders they can see. Agents have it unless the admin turns it off.
+   */
+  INSTALLATION_VIEW: 'installation.view',
 } as const
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS]
@@ -49,6 +54,15 @@ export function isEngineerRole(permissions: readonly string[]): boolean {
   )
 }
 
+/** Can read installation reports: those who fill them in, engineers (their own part) and readers. */
+export function canSeeInstallation(permissions: { has(p: string): boolean }): boolean {
+  return (
+    permissions.has(PERMISSIONS.INSTALLATION_MANAGE) ||
+    permissions.has(PERMISSIONS.INSTALLATION_OWN) ||
+    permissions.has(PERMISSIONS.INSTALLATION_VIEW)
+  )
+}
+
 export type DefaultRoleKey = 'admin' | 'agent' | 'engineer' | 'viewer'
 
 /** Roles copied into every new client workspace. */
@@ -62,6 +76,7 @@ export const DEFAULT_ROLES: { key: DefaultRoleKey; name: string; permissions: Pe
       PERMISSIONS.TENDER_MOVE_STAGE,
       PERMISSIONS.TENDER_DOCUMENTS,
       PERMISSIONS.REPORT_VIEW,
+      PERMISSIONS.INSTALLATION_VIEW,
     ],
   },
   {
@@ -78,6 +93,11 @@ export const DEFAULT_ROLES: { key: DefaultRoleKey; name: string; permissions: Pe
   {
     key: 'viewer',
     name: 'Viewer',
-    permissions: [PERMISSIONS.TENDER_VIEW_ALL, PERMISSIONS.REPORT_VIEW, PERMISSIONS.ASSET_VIEW],
+    permissions: [
+      PERMISSIONS.TENDER_VIEW_ALL,
+      PERMISSIONS.REPORT_VIEW,
+      PERMISSIONS.ASSET_VIEW,
+      PERMISSIONS.INSTALLATION_VIEW,
+    ],
   },
 ]
