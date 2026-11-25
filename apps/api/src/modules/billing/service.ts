@@ -173,7 +173,7 @@ export function subscriptionOf(
   return { state, endsAt: end, graceEndsAt }
 }
 
-function toPaymentSummary(p: Payment, planName: string): PaymentSummary {
+export function toPaymentSummary(p: Payment, planName: string): PaymentSummary {
   return {
     id: p.id,
     plan: { id: p.planId, name: planName },

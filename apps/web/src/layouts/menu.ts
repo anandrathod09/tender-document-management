@@ -5,6 +5,7 @@ import {
   FileText,
   FolderOpen,
   HardDrive,
+  IndianRupee,
   Landmark,
   LayoutDashboard,
   LifeBuoy,
@@ -147,6 +148,7 @@ export const ownerMenu: MenuGroup[] = [
   {
     items: [
       { label: 'Clients', to: '/organizations', icon: Building2 },
+      { label: 'Revenue', to: '/revenue', icon: IndianRupee },
       { label: 'Plans', to: '/plans', icon: CreditCard },
     ],
   },

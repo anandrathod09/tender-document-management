@@ -212,7 +212,7 @@ const tip = computed(() => {
   --muted: #6b6a66;
   --hover: rgba(16, 24, 40, 0.04);
 }
-:global(.dark) .viz {
+.dark .viz {
   --series-1: #3987e5;
   --series-2: #d95926;
   --series-3: #199e70;

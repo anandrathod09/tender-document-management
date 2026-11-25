@@ -1,7 +1,9 @@
 import { z } from 'zod'
 import {
   BILLING_CYCLES,
+  PAYMENT_METHODS,
   type BillingCycle,
+  type OrganizationStatus,
   type PaymentMethod,
   type PaymentStatus,
 } from './workspace'
@@ -228,4 +230,65 @@ export interface CheckoutOrder {
 export interface CompanyLimit {
   used: number
   max: number
+}
+
+// ---------------------------------------------------------------------------
+// Owner panel: revenue
+
+/** "2026-27": the Indian financial year, April to March. */
+export const FINANCIAL_YEAR_PATTERN = /^\d{4}-\d{2}$/
+
+export const revenueQuerySchema = z.object({
+  fy: z.string().regex(FINANCIAL_YEAR_PATTERN, 'Pick a financial year').optional(),
+  organizationId: z.string().max(36).optional(),
+  method: z.enum(PAYMENT_METHODS).optional(),
+})
+export type RevenueQuery = z.infer<typeof revenueQuerySchema>
+
+/** Paid payments added up. Amounts in whole rupees. */
+export interface RevenueTotals {
+  count: number
+  baseAmount: number
+  cgst: number
+  sgst: number
+  igst: number
+  totalAmount: number
+}
+
+export interface RevenueMonth extends RevenueTotals {
+  /** YYYY-MM, by the paid date in India. */
+  month: string
+}
+
+/**
+ * A client to follow up: paid period ends soon (renewal), already ended
+ * (overdue), or a trial that ends soon or has ended without a payment.
+ */
+export interface RevenueFollowUp {
+  organization: { id: string; name: string; slug: string; status: OrganizationStatus }
+  kind: 'renewal' | 'overdue' | 'trial_ending' | 'trial_ended'
+  date: string
+  plan: string
+  cycle: BillingCycle | null
+  /** Plan price for one period, before GST; null when priced on request. */
+  expectedBase: number | null
+}
+
+export interface RevenueOverview {
+  financialYear: string
+  /** Financial years that can be picked, newest first. */
+  years: string[]
+  thisMonth: RevenueTotals
+  year: RevenueTotals
+  /** Clients with a paid period running now. */
+  payingClients: number
+  /** The 12 months of the financial year, April first. */
+  months: RevenueMonth[]
+  followUps: RevenueFollowUp[]
+}
+
+export interface RevenuePayment extends PaymentSummary {
+  organization: { id: string; name: string; slug: string }
+  billToName: string | null
+  billToGstin: string | null
 }

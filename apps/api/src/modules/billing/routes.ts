@@ -6,6 +6,7 @@ import {
   manualPaymentSchema,
   PERMISSIONS,
   planSchema,
+  revenueQuerySchema,
 } from '@tdm/shared'
 import { getOrganizationDetail } from '../owner/service'
 import { db } from '../../db/client'
@@ -20,6 +21,7 @@ import {
 } from '../../middleware/auth'
 import type { Actor } from '../users/service'
 import { buildInvoicePdf } from './invoice'
+import { exportRevenue, getRevenueOverview, listRevenuePayments } from './revenue'
 import {
   confirmPayment,
   createPlan,
@@ -132,4 +134,26 @@ ownerBillingRouter.post('/organizations/:id/payments', async (req, res) => {
 
 ownerBillingRouter.get('/organizations/:id/payments/:paymentId/invoice.pdf', async (req, res) => {
   await sendInvoice(res, req.params.id as string, req.params.paymentId as string)
+})
+
+/** Revenue across all clients: totals, months, payments and who to follow up. */
+ownerBillingRouter.get('/revenue', async (req, res) => {
+  res.json(await getRevenueOverview(parse(revenueQuerySchema, req.query)))
+})
+
+ownerBillingRouter.get('/revenue/payments', async (req, res) => {
+  res.json(await listRevenuePayments(parse(revenueQuerySchema, req.query)))
+})
+
+/** The invoice register for the accountant (GST returns), with the same filters. */
+ownerBillingRouter.get('/revenue/invoices.xlsx', async (req, res) => {
+  const query = parse(revenueQuerySchema, req.query)
+  const bytes = await exportRevenue(query)
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  res.setHeader(
+    'Content-Disposition',
+    `attachment; filename="Invoices_${query.fy ?? 'this-year'}.xlsx"`,
+  )
+  res.setHeader('Cache-Control', 'no-store')
+  res.end(bytes)
 })

@@ -335,6 +335,11 @@ Clients can add their own declaration letters for compliance PDFs, under Manage 
 
 - **Plans:** limits (users, storage, tenders per month, active bidding companies), plus monthly and yearly prices before GST. A plan with no price shows "Price on request". A plan can be public or private, and active or retired.
 - **Client page → Billing & Payments:** records bank transfers and cheques, and downloads invoices.
+- **Revenue** (`GET /api/owner/revenue`, `/revenue/payments`, `/revenue/invoices.xlsx`): money from all clients for a financial year (April to March, by the paid date in India). Only payments with status `paid` count; unfinished online checkouts don't.
+  - Tiles: collected this month, collected this year (and before GST), GST this year (CGST/SGST/IGST), and paying clients.
+  - A month-by-month chart, with the same numbers as a table.
+  - **Follow Up:** clients whose paid period ends within 30 days (renewal due) or has ended (overdue), and trials ending soon or ended.
+  - **Payments:** every paid invoice, filtered by client and online/manual, with invoice download and an Excel invoice register (GSTIN and the GST split) for the accountant.
 
 **Clients: Manage → Billing** (needs `settings.manage`)
 

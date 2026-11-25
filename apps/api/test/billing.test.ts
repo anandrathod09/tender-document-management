@@ -1,10 +1,11 @@
 import { createHmac } from 'node:crypto'
+import ExcelJS from 'exceljs'
 import { eq } from 'drizzle-orm'
 import request from 'supertest'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { env } from '../src/config/env'
 import { db } from '../src/db/client'
-import { notifications, organizations } from '../src/db/schema'
+import { notifications, organizations, payments } from '../src/db/schema'
 import { testOutbox } from '../src/lib/mailer'
 import { addPeriod, financialYear, gstBreakdown } from '../src/modules/billing/gst'
 import { rupeesInWords } from '../src/modules/billing/invoice'
@@ -327,6 +328,100 @@ describe('billing', () => {
     )
     expect(pdf.status).toBe(200)
     expect((await client().get('/billing')).body.payments).toHaveLength(1)
+  })
+
+  it('owner revenue: totals, months, follow-ups, filters and the invoice register', async () => {
+    const DAY = 86_400_000
+    // Acme pays online for a month; Bravo pays ₹29,500 by bank transfer for a year.
+    await client().put('/billing/details').send(details)
+    const { confirmed } = await payOnline('monthly')
+    const bravo = await setupClient(ownerToken, await createPlan(), 'bravo')
+    const manual = await owner().post(`/owner/organizations/${bravo.org.id}/payments`).send({
+      planId,
+      cycle: 'yearly',
+      totalAmount: 29500,
+      reference: 'UTR42',
+    })
+    // A checkout that was never paid does not count.
+    await client().post('/billing/checkout').send({ planId, cycle: 'yearly' })
+    // An old payment from last financial year.
+    const old = await owner().post(`/owner/organizations/${bravo.org.id}/payments`).send({
+      planId,
+      cycle: 'monthly',
+      totalAmount: 2360,
+      reference: 'UTR-OLD',
+    })
+    await db
+      .update(payments)
+      .set({ paidAt: new Date(Date.now() - 400 * DAY) })
+      .where(eq(payments.id, old.body.id))
+    // Who to follow up: Acme renews in 10 days, Bravo is 2 days overdue, Carol's trial ends in 5.
+    const carol = await setupClient(ownerToken, await createPlan(), 'carol')
+    const set = (id: string, v: Partial<typeof organizations.$inferInsert>) =>
+      db.update(organizations).set(v).where(eq(organizations.id, id))
+    await set(orgId, { paidUntil: new Date(Date.now() + 10 * DAY) })
+    await set(bravo.org.id, { paidUntil: new Date(Date.now() - 2 * DAY) })
+    await set(carol.org.id, { paidUntil: null, trialEndsAt: new Date(Date.now() + 5 * DAY) })
+
+    const r = await owner().get('/owner/revenue')
+    expect(r.status).toBe(200)
+    const total = confirmed.body.totalAmount + manual.body.totalAmount
+    expect(r.body.year).toMatchObject({ count: 2, totalAmount: total })
+    expect(r.body.year.baseAmount).toBe(confirmed.body.baseAmount + manual.body.baseAmount)
+    expect(r.body.thisMonth).toMatchObject({ count: 2, totalAmount: total })
+    expect(r.body.months).toHaveLength(12)
+    expect(r.body.months[0].month.endsWith('-04')).toBe(true)
+    expect(r.body.months.reduce((n: number, m: { count: number }) => n + m.count, 0)).toBe(2)
+    expect(r.body.years).toHaveLength(2)
+    expect(r.body.payingClients).toBe(1)
+    expect(
+      r.body.followUps.map((f: { organization: { slug: string }; kind: string }) => [
+        f.organization.slug,
+        f.kind,
+      ]),
+    ).toEqual([
+      ['bravo', 'overdue'],
+      ['carol', 'trial_ending'],
+      ['acme', 'renewal'],
+    ])
+
+    // Last year shows only the old payment.
+    const last = await owner().get(`/owner/revenue?fy=${r.body.years[1]}`)
+    expect(last.body.year).toMatchObject({ count: 1, totalAmount: 2360 })
+
+    // The payments list and the Excel file take the same filters.
+    const byClient = await owner().get(`/owner/revenue/payments?organizationId=${bravo.org.id}`)
+    expect(byClient.body.map((p: { reference: string }) => p.reference)).toEqual(['UTR42'])
+    const online = await owner().get('/owner/revenue/payments?method=razorpay')
+    expect(online.body).toHaveLength(1)
+    expect(online.body[0]).toMatchObject({
+      organization: { slug: 'acme' },
+      billToGstin: details.billingGstin,
+    })
+
+    const xlsx = await owner()
+      .get('/owner/revenue/invoices.xlsx')
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = []
+        res.on('data', (c: Buffer) => chunks.push(c))
+        res.on('end', () => cb(null, Buffer.concat(chunks)))
+      })
+    expect(xlsx.status).toBe(200)
+    const wb = new ExcelJS.Workbook()
+    await wb.xlsx.load(xlsx.body)
+    const ws = wb.worksheets[0]!
+    expect(ws.rowCount).toBe(3)
+    const header = (ws.getRow(1).values as string[]).slice(1)
+    expect(header).toContain('Taxable value')
+    expect(ws.getRow(3).getCell(header.indexOf('Total') + 1).value).toBe(29500)
+
+    // Clients never see it.
+    const asClient = await request(app)
+      .get('/api/owner/revenue')
+      .set('Host', ACME)
+      .set(bearer(adminToken))
+    expect(asClient.status).not.toBe(200)
   })
 
   it("a client cannot confirm or download another client's payment", async () => {

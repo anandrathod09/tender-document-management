@@ -200,6 +200,11 @@ function ownerRoutes(): RouteRecordRaw[] {
           component: () => import('@/features/owner/PlansPage.vue'),
           meta: { title: 'Plans' },
         },
+        {
+          path: 'revenue',
+          component: () => import('@/features/owner/RevenuePage.vue'),
+          meta: { title: 'Revenue' },
+        },
       ],
     },
     notFoundRoute,
