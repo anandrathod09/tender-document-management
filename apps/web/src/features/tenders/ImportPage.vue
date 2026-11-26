@@ -86,7 +86,13 @@ async function detect(f: File) {
     inspected.value = info
     const s = info.suggested
     const match = profiles.value.find((p) => fits(p.columns, info))
-    if (match) {
+    if (info.ownExport) {
+      // Our own "Export to Excel" file, uploaded instead of the portal's download.
+      detectNote.value = {
+        text: 'This file was exported from this app (it has Stage and Assigned agent columns), not downloaded from Tender247. Upload the file you downloaded from the Tender247 website.',
+        ok: false,
+      }
+    } else if (match) {
       layout.value = match.id
       detectNote.value = { text: `Matches your “${match.name}” layout.`, ok: true }
     } else if (s.title && s.deadline && (s.referenceNo || s.sourceTenderId)) {

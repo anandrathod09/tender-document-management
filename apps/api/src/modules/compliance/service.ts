@@ -185,6 +185,8 @@ export async function generatePack(packId: string, orgId: string): Promise<void>
 
     const warnings: string[] = []
     const attachments: Attachment[] = []
+    /** Where each document landed in `attachments`. */
+    const attachmentAt = new Map<string, number>()
     // Library documents first, then the tender's own documents, in the order chosen.
     for (const id of [...pack.request.libraryFileIds, ...pack.request.tenderFileIds]) {
       const f = byId.get(id)
@@ -192,8 +194,27 @@ export async function generatePack(packId: string, orgId: string): Promise<void>
         warnings.push('A chosen document was deleted before the PDF was built, so it was skipped.')
         continue
       }
+      attachmentAt.set(id, attachments.length)
       attachments.push(await readFile(f))
     }
+
+    // The page order the person arranged: built-in letters, then their own
+    // letters, are numbered as the PDF builder lists them.
+    const { letters, templateIds = [] } = pack.request
+    const order = pack.request.order
+      ?.map((p) => {
+        if (p.kind === 'letter') {
+          const i = letters.indexOf(p.id as (typeof letters)[number])
+          return i < 0 ? null : { type: 'letter' as const, index: i }
+        }
+        if (p.kind === 'template') {
+          const i = templateIds.indexOf(p.id)
+          return i < 0 ? null : { type: 'letter' as const, index: letters.length + i }
+        }
+        const at = attachmentAt.get(p.id)
+        return at === undefined ? null : { type: 'attachment' as const, index: at }
+      })
+      .filter((p) => p !== null)
 
     const date = todayIn(org.timezone)
     const result = await buildCompliancePdf({
@@ -221,6 +242,7 @@ export async function generatePack(packId: string, orgId: string): Promise<void>
       logo: await image(company.logoFileId),
       signature: await image(company.signatureFileId),
       attachments,
+      order,
     })
     warnings.push(...result.warnings)
 

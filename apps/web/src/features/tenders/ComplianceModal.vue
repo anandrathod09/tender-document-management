@@ -1,7 +1,9 @@
 <script setup lang="ts">
+import { ArrowDown, ArrowUp, GripVertical } from 'lucide-vue-next'
 import { computed, ref, watch } from 'vue'
 import type {
   CompanySummary,
+  CompliancePartKind,
   CompliancePackSummary,
   FileSummary,
   LetterLibrary,
@@ -9,6 +11,7 @@ import type {
 } from '@tdm/shared'
 import { COMPLIANCE_LETTERS } from '@tdm/shared'
 import { PERMISSIONS } from '@tdm/shared/permissions'
+import IconButton from '@/components/ui/IconButton.vue'
 import UiAlert from '@/components/ui/UiAlert.vue'
 import UiButton from '@/components/ui/UiButton.vue'
 import UiModal from '@/components/ui/UiModal.vue'
@@ -36,6 +39,15 @@ const tenderIds = ref<string[]>([])
 const library = ref<FileSummary[]>([])
 const error = ref('')
 const saving = ref(false)
+/** Step 1: choose what goes in. Step 2: put it in order. */
+const step = ref<'choose' | 'arrange'>('choose')
+interface Part {
+  kind: CompliancePartKind
+  id: string
+  title: string
+}
+/** The chosen letters and documents in the order they will be printed. */
+const arranged = ref<Part[]>([])
 
 const activeCompanies = computed(() => props.companies.filter((c) => c.isActive))
 const company = computed(() => activeCompanies.value.find((c) => c.id === companyId.value))
@@ -80,6 +92,8 @@ watch(
     libraryIds.value = []
     tenderIds.value = []
     error.value = ''
+    step.value = 'choose'
+    arranged.value = []
     try {
       const [lib, lettersRes] = await Promise.all([
         api.get<FileSummary[]>('/library'),
@@ -109,7 +123,69 @@ function toggleAllLetters() {
   templateIds.value = all ? [] : ownLetters.value.map((t) => t.id)
 }
 
+/** What was ticked, in the order of the lists on screen (letters first). */
+const chosenParts = computed<Part[]>(() => [
+  ...builtins.value
+    .filter((b) => letters.value.includes(b.key))
+    .map((b) => ({ kind: 'letter' as const, id: b.key, title: b.title })),
+  ...ownLetters.value
+    .filter((t) => templateIds.value.includes(t.id))
+    .map((t) => ({ kind: 'template' as const, id: t.id, title: t.title })),
+  ...libraryForCompany.value
+    .filter((d) => libraryIds.value.includes(d.id))
+    .map((d) => ({ kind: 'library' as const, id: d.id, title: d.title })),
+  ...props.tenderDocs
+    .filter((d) => tenderIds.value.includes(d.id))
+    .map((d) => ({ kind: 'tender' as const, id: d.id, title: d.title })),
+])
+const KIND_LABELS: Record<CompliancePartKind, string> = {
+  letter: 'Letter',
+  template: 'Your letter',
+  library: 'Library document',
+  tender: 'Tender document',
+}
+const keyOf = (p: Part) => `${p.kind}:${p.id}`
+
+/**
+ * Opens the order step. An order arranged before is kept for what is still
+ * chosen; anything newly ticked goes at the end.
+ */
+function toArrange() {
+  const chosen = chosenParts.value
+  const still = new Set(chosen.map(keyOf))
+  const kept = arranged.value.filter((p) => still.has(keyOf(p)))
+  const have = new Set(kept.map(keyOf))
+  arranged.value = [...kept, ...chosen.filter((p) => !have.has(keyOf(p)))]
+  step.value = 'arrange'
+}
+
+function move(from: number, to: number) {
+  if (to < 0 || to >= arranged.value.length || from === to) return
+  const list = [...arranged.value]
+  const [item] = list.splice(from, 1)
+  list.splice(to, 0, item!)
+  arranged.value = list
+}
+
+// Dragging a row onto another moves it there.
+const dragFrom = ref<number | null>(null)
+const dragOver = ref<number | null>(null)
+function drop(to: number) {
+  if (dragFrom.value !== null) move(dragFrom.value, to)
+  dragFrom.value = null
+  dragOver.value = null
+}
+function dragEnd() {
+  dragFrom.value = null
+  dragOver.value = null
+}
+
 async function submit() {
+  // More than one item: arrange the order first.
+  if (step.value === 'choose' && total.value > 1) {
+    toArrange()
+    return
+  }
   error.value = ''
   saving.value = true
   try {
@@ -129,6 +205,9 @@ async function submit() {
         tenderFileIds: props.tenderDocs
           .filter((d) => tenderIds.value.includes(d.id))
           .map((d) => d.id),
+        ...(step.value === 'arrange' && {
+          order: arranged.value.map((p) => ({ kind: p.kind, id: p.id })),
+        }),
       },
     )
     emit('requested', data)
@@ -141,170 +220,240 @@ async function submit() {
 </script>
 
 <template>
-  <UiModal :open="open" title="Create compliance PDF" width="lg" @close="emit('close')">
+  <UiModal
+    :open="open"
+    :title="step === 'choose' ? 'Create compliance PDF' : 'Arrange the pages'"
+    width="lg"
+    @close="emit('close')"
+  >
     <form id="compliance-form" class="space-y-5" @submit.prevent="submit">
       <UiAlert v-if="error">{{ error }}</UiAlert>
-      <div class="grid gap-4 sm:grid-cols-2">
-        <UiSelect
-          v-model="companyId"
-          label="Letterhead of"
-          :options="activeCompanies.map((c) => ({ value: c.id, label: c.name }))"
-          required
-        />
-        <div>
-          <label
-            for="dept-address"
-            class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
-          >
-            Department address
-          </label>
-          <textarea
-            id="dept-address"
-            v-model="departmentAddress"
-            rows="2"
-            maxlength="500"
-            class="form-field h-auto"
-            placeholder="Printed under the buyer's name in the To, block"
-          />
-        </div>
-      </div>
-      <UiAlert v-if="missing.length" variant="warning">
-        {{ company?.name }} has no {{ missing.join(' or ') }} yet; letters will be printed without
-        it.
-      </UiAlert>
 
-      <fieldset>
-        <div class="mb-2 flex items-center justify-between">
-          <legend class="text-sm font-medium text-gray-800 dark:text-white/90">
-            Declaration letters
-          </legend>
-          <div class="flex items-center gap-4">
-            <RouterLink
-              v-if="canManageLetters"
-              to="/settings/letters"
-              class="text-theme-xs font-medium text-gray-500 hover:text-brand-500"
+      <template v-if="step === 'arrange'">
+        <p class="text-theme-sm text-gray-600 dark:text-gray-400">
+          The PDF is printed from top to bottom. Drag a row, use the arrows, or pick its number.
+        </p>
+        <ol class="space-y-2">
+          <li
+            v-for="(p, i) in arranged"
+            :key="keyOf(p)"
+            draggable="true"
+            :class="[
+              'flex items-center gap-3 rounded-md border bg-white px-3 py-2 dark:bg-white/[0.03]',
+              dragOver === i && dragFrom !== i
+                ? 'border-blue-400 ring-1 ring-blue-400'
+                : 'border-gray-200 dark:border-gray-800',
+              dragFrom === i && 'opacity-50',
+            ]"
+            @dragstart="dragFrom = i"
+            @dragover.prevent="dragOver = i"
+            @drop.prevent="drop(i)"
+            @dragend="dragEnd"
+          >
+            <GripVertical
+              class="size-4 shrink-0 cursor-grab text-gray-400 max-sm:hidden"
+              aria-hidden="true"
+            />
+            <select
+              :value="i"
+              :aria-label="`Position of ${p.title}`"
+              class="form-field h-8! w-16! shrink-0 px-2! py-0! text-sm!"
+              @change="move(i, Number(($event.target as HTMLSelectElement).value))"
             >
-              Manage letters
-            </RouterLink>
-            <button
-              type="button"
-              class="text-theme-xs font-medium text-brand-500"
-              @click="toggleAllLetters"
+              <option v-for="(_, n) in arranged" :key="n" :value="n">{{ n + 1 }}</option>
+            </select>
+            <div class="min-w-0 flex-1">
+              <p class="truncate text-theme-sm text-gray-800 dark:text-white/90">{{ p.title }}</p>
+              <p class="text-theme-xs text-gray-500 dark:text-gray-400">
+                {{ KIND_LABELS[p.kind] }}
+              </p>
+            </div>
+            <IconButton
+              :icon="ArrowUp"
+              :label="`Move ${p.title} up`"
+              :disabled="i === 0"
+              @click="move(i, i - 1)"
+            />
+            <IconButton
+              :icon="ArrowDown"
+              :label="`Move ${p.title} down`"
+              :disabled="i === arranged.length - 1"
+              @click="move(i, i + 1)"
+            />
+          </li>
+        </ol>
+      </template>
+
+      <template v-else>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <UiSelect
+            v-model="companyId"
+            label="Letterhead of"
+            :options="activeCompanies.map((c) => ({ value: c.id, label: c.name }))"
+            required
+          />
+          <div>
+            <label
+              for="dept-address"
+              class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
             >
-              {{ allLetters ? 'Clear all' : 'Select all' }}
-            </button>
+              Department address
+            </label>
+            <textarea
+              id="dept-address"
+              v-model="departmentAddress"
+              rows="2"
+              maxlength="500"
+              class="form-field h-auto"
+              placeholder="Printed under the buyer's name in the To, block"
+            />
           </div>
         </div>
-        <div class="grid gap-x-4 gap-y-2 sm:grid-cols-2">
-          <label
-            v-for="l in builtins"
-            :key="l.key"
-            class="flex items-start gap-2 text-theme-sm text-gray-700 dark:text-gray-300"
-          >
-            <input
-              v-model="letters"
-              type="checkbox"
-              :value="l.key"
-              class="mt-0.5 size-4 rounded border-gray-300 accent-brand-500"
-            />
-            {{ l.title }}
-          </label>
-        </div>
-        <template v-if="ownLetters.length">
-          <p class="mt-4 mb-2 text-theme-xs font-medium tracking-wider text-gray-500 uppercase">
-            Your letters
-          </p>
+        <UiAlert v-if="missing.length" variant="warning">
+          {{ company?.name }} has no {{ missing.join(' or ') }} yet; letters will be printed without
+          it.
+        </UiAlert>
+
+        <fieldset>
+          <div class="mb-2 flex items-center justify-between">
+            <legend class="text-sm font-medium text-gray-800 dark:text-white/90">
+              Declaration letters
+            </legend>
+            <div class="flex items-center gap-4">
+              <RouterLink
+                v-if="canManageLetters"
+                to="/settings/letters"
+                class="text-theme-xs font-medium text-gray-500 hover:text-brand-500"
+              >
+                Manage letters
+              </RouterLink>
+              <button
+                type="button"
+                class="text-theme-xs font-medium text-brand-500"
+                @click="toggleAllLetters"
+              >
+                {{ allLetters ? 'Clear all' : 'Select all' }}
+              </button>
+            </div>
+          </div>
           <div class="grid gap-x-4 gap-y-2 sm:grid-cols-2">
             <label
-              v-for="t in ownLetters"
-              :key="t.id"
+              v-for="l in builtins"
+              :key="l.key"
               class="flex items-start gap-2 text-theme-sm text-gray-700 dark:text-gray-300"
             >
               <input
-                v-model="templateIds"
+                v-model="letters"
                 type="checkbox"
-                :value="t.id"
+                :value="l.key"
                 class="mt-0.5 size-4 rounded border-gray-300 accent-brand-500"
               />
-              <span>
-                {{ t.title }}
-                <span v-if="t.company" class="text-theme-xs text-gray-400">
-                  · only {{ t.company.name }}
-                </span>
-              </span>
+              {{ l.title }}
             </label>
           </div>
-        </template>
-      </fieldset>
+          <template v-if="ownLetters.length">
+            <p class="mt-4 mb-2 text-theme-xs font-medium tracking-wider text-gray-500 uppercase">
+              Your letters
+            </p>
+            <div class="grid gap-x-4 gap-y-2 sm:grid-cols-2">
+              <label
+                v-for="t in ownLetters"
+                :key="t.id"
+                class="flex items-start gap-2 text-theme-sm text-gray-700 dark:text-gray-300"
+              >
+                <input
+                  v-model="templateIds"
+                  type="checkbox"
+                  :value="t.id"
+                  class="mt-0.5 size-4 rounded border-gray-300 accent-brand-500"
+                />
+                <span>
+                  {{ t.title }}
+                  <span v-if="t.company" class="text-theme-xs text-gray-400">
+                    · only {{ t.company.name }}
+                  </span>
+                </span>
+              </label>
+            </div>
+          </template>
+        </fieldset>
 
-      <fieldset>
-        <legend class="mb-2 text-sm font-medium text-gray-800 dark:text-white/90">
-          From the document library
-        </legend>
-        <p v-if="!libraryForCompany.length" class="text-theme-sm text-gray-500 dark:text-gray-400">
-          Nothing in the library for this company yet.
-        </p>
-        <div class="custom-scrollbar max-h-44 space-y-2 overflow-y-auto">
-          <label
-            v-for="d in libraryForCompany"
-            :key="d.id"
-            :class="[
-              'flex items-start gap-2 text-theme-sm',
-              mergeable(d) ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400',
-            ]"
+        <fieldset>
+          <legend class="mb-2 text-sm font-medium text-gray-800 dark:text-white/90">
+            From the document library
+          </legend>
+          <p
+            v-if="!libraryForCompany.length"
+            class="text-theme-sm text-gray-500 dark:text-gray-400"
           >
-            <input
-              v-model="libraryIds"
-              type="checkbox"
-              :value="d.id"
-              :disabled="!mergeable(d)"
-              class="mt-0.5 size-4 rounded border-gray-300"
-            />
-            {{ d.title }}
-            <span v-if="!mergeable(d)" class="text-theme-xs"
-              >(only PDFs and images can be merged)</span
+            Nothing in the library for this company yet.
+          </p>
+          <div class="custom-scrollbar max-h-44 space-y-2 overflow-y-auto">
+            <label
+              v-for="d in libraryForCompany"
+              :key="d.id"
+              :class="[
+                'flex items-start gap-2 text-theme-sm',
+                mergeable(d) ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400',
+              ]"
             >
-          </label>
-        </div>
-      </fieldset>
+              <input
+                v-model="libraryIds"
+                type="checkbox"
+                :value="d.id"
+                :disabled="!mergeable(d)"
+                class="mt-0.5 size-4 rounded border-gray-300"
+              />
+              {{ d.title }}
+              <span v-if="!mergeable(d)" class="text-theme-xs"
+                >(only PDFs and images can be merged)</span
+              >
+            </label>
+          </div>
+        </fieldset>
 
-      <fieldset v-if="tenderDocs.length">
-        <legend class="mb-2 text-sm font-medium text-gray-800 dark:text-white/90">
-          This tender's documents
-        </legend>
-        <div class="space-y-2">
-          <label
-            v-for="d in tenderDocs"
-            :key="d.id"
-            :class="[
-              'flex items-start gap-2 text-theme-sm',
-              mergeable(d) ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400',
-            ]"
-          >
-            <input
-              v-model="tenderIds"
-              type="checkbox"
-              :value="d.id"
-              :disabled="!mergeable(d)"
-              class="mt-0.5 size-4 rounded border-gray-300"
-            />
-            {{ d.title }}
-          </label>
-        </div>
-      </fieldset>
+        <fieldset v-if="tenderDocs.length">
+          <legend class="mb-2 text-sm font-medium text-gray-800 dark:text-white/90">
+            This tender's documents
+          </legend>
+          <div class="space-y-2">
+            <label
+              v-for="d in tenderDocs"
+              :key="d.id"
+              :class="[
+                'flex items-start gap-2 text-theme-sm',
+                mergeable(d) ? 'text-gray-700 dark:text-gray-300' : 'text-gray-400',
+              ]"
+            >
+              <input
+                v-model="tenderIds"
+                type="checkbox"
+                :value="d.id"
+                :disabled="!mergeable(d)"
+                class="mt-0.5 size-4 rounded border-gray-300"
+              />
+              {{ d.title }}
+            </label>
+          </div>
+        </fieldset>
+      </template>
     </form>
     <template #footer>
       <p class="mr-auto self-center text-theme-xs text-gray-500 dark:text-gray-400">
-        {{ total }} selected
+        <template v-if="total > 1">Step {{ step === 'choose' ? 1 : 2 }} of 2 · </template
+        >{{ total }} selected
       </p>
-      <UiButton variant="secondary" @click="emit('close')">Cancel</UiButton>
+      <UiButton v-if="step === 'arrange'" variant="secondary" @click="step = 'choose'">
+        Back
+      </UiButton>
+      <UiButton v-else variant="secondary" @click="emit('close')">Cancel</UiButton>
       <UiButton
         type="submit"
         form="compliance-form"
         :disabled="!companyId || total === 0"
         :loading="saving"
       >
-        Build PDF
+        {{ step === 'choose' && total > 1 ? 'Next: Page Order' : 'Build PDF' }}
       </UiButton>
     </template>
   </UiModal>

@@ -110,6 +110,15 @@ export const libraryUploadSchema = z.object({
     .optional(),
 })
 
+/** What can go into a compliance PDF: a built-in letter, your letter, a library or tender document. */
+export const COMPLIANCE_PART_KINDS = ['letter', 'template', 'library', 'tender'] as const
+export type CompliancePartKind = (typeof COMPLIANCE_PART_KINDS)[number]
+export const compliancePartSchema = z.object({
+  kind: z.enum(COMPLIANCE_PART_KINDS),
+  id: z.string().min(1).max(64),
+})
+export type CompliancePart = z.infer<typeof compliancePartSchema>
+
 export const createCompliancePackSchema = z
   .object({
     companyId: z.uuid(),
@@ -119,12 +128,35 @@ export const createCompliancePackSchema = z
     templateIds: z.array(z.uuid()).max(50).default([]),
     libraryFileIds: z.array(z.uuid()).max(50).default([]),
     tenderFileIds: z.array(z.uuid()).max(50).default([]),
+    /**
+     * The order of the pages in the PDF: every chosen letter and document once.
+     * Left out, letters come first, then your letters, library and tender documents.
+     */
+    order: z.array(compliancePartSchema).max(200).optional(),
   })
   .refine(
     (v) =>
       v.letters.length + v.templateIds.length + v.libraryFileIds.length + v.tenderFileIds.length >
       0,
     'Choose at least one letter or document',
+  )
+  .refine(
+    (v) => {
+      if (!v.order) return true
+      const chosen = [
+        ...v.letters.map((id) => `letter:${id}`),
+        ...v.templateIds.map((id) => `template:${id}`),
+        ...v.libraryFileIds.map((id) => `library:${id}`),
+        ...v.tenderFileIds.map((id) => `tender:${id}`),
+      ]
+      const ordered = v.order.map((p) => `${p.kind}:${p.id}`)
+      return (
+        ordered.length === chosen.length &&
+        new Set(ordered).size === ordered.length &&
+        chosen.every((c) => ordered.includes(c))
+      )
+    },
+    { message: 'The page order must list each chosen letter and document once', path: ['order'] },
   )
 /** Stored with each compliance PDF request. */
 export type CompliancePackRequest = Omit<

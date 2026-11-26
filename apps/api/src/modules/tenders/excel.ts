@@ -194,6 +194,25 @@ export async function readHeadings(
   return sheets
 }
 
+/** Headings found together only in this app's own "Export to Excel" tender list. */
+const OWN_EXPORT_HEADINGS = ['TENDER BRIEF', 'STAGE', 'IN STAGE SINCE', 'STAGE NOTE']
+
+/** True when a sheet is a tender list exported from this app, not a portal download. */
+export function hasOwnExportHeadings(sheets: { headings: string[] }[]): boolean {
+  return sheets.some((s) => {
+    const names = new Set(s.headings.map(normalise))
+    return OWN_EXPORT_HEADINGS.every((h) => names.has(h))
+  })
+}
+
+export async function isOwnExport(buffer: Buffer): Promise<boolean> {
+  try {
+    return hasOwnExportHeadings(await readHeadings(buffer))
+  } catch {
+    return false
+  }
+}
+
 /** Fields whose column heading matches a Tender247 name, picking the first match. */
 export function suggestColumns(headings: readonly string[]): ImportColumns {
   const byName = new Map(headings.map((h) => [normalise(h), h]))

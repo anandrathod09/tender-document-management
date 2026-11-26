@@ -69,4 +69,6 @@ export interface ImportInspectResult {
   sheets: ImportSheetInfo[]
   /** Columns that look like a known field, by their heading. */
   suggested: ImportColumns
+  /** The file is a tender list exported from this app (Export to Excel), not a portal download. */
+  ownExport: boolean
 }

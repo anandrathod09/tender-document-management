@@ -44,6 +44,40 @@ describe('Excel import', () => {
     adminToken = (await setupClient(await loginOwner(), await createPlan(), 'acme')).adminToken
   })
 
+  it("explains when the file is this app's own export, not a Tender247 download", async () => {
+    const own = await workbook({
+      Tenders: [
+        {
+          'Reference no.': 'PWD/1',
+          'Tender247 ID': '97001',
+          'Tender brief': 'Road work',
+          Deadline: indian(inDays(5)),
+          Stage: 'Assigned',
+          'In stage since': indian(inDays(-1)),
+          'Stage note': 'x',
+          'Assigned agent': 'Demo Agent',
+        },
+      ],
+    })
+    const inspect = await request(app)
+      .post('/api/tenders/import/inspect')
+      .set('Host', ACME)
+      .set(bearer(adminToken))
+      .attach('file', own, 'Tenders_2026-11-24.xlsx')
+    expect(inspect.body.ownExport).toBe(true)
+    const res = await importFile(ACME, adminToken, own)
+    expect(res.body.error.code).toBe('OWN_EXPORT')
+    expect(res.body.error.message).toMatch(/not downloaded from Tender247/)
+
+    // A real Tender247 file is not mistaken for one.
+    const t247 = await request(app)
+      .post('/api/tenders/import/inspect')
+      .set('Host', ACME)
+      .set(bearer(adminToken))
+      .attach('file', await workbook({ S: [t247Row('PWD/2')] }), 'tenders.xlsx')
+    expect(t247.body.ownExport).toBe(false)
+  })
+
   it('imports GeM and Non-GeM sheets and skips expired or incomplete rows', async () => {
     const file = await workbook({
       'GeM Tenders': [

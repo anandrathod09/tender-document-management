@@ -312,6 +312,55 @@ describe('companies, documents and compliance PDFs', () => {
     ).toBe(0)
   })
 
+  it('puts the pages in the order the person arranged', async () => {
+    const c = await createCompany()
+    // Two one-page documents with their own page sizes, so each page can be recognised.
+    const sized = async (size: number) => {
+      const doc = await PDFDocument.create()
+      doc.addPage([size, size])
+      return Buffer.from(await doc.save())
+    }
+    const small = await uploadTo('/api/library', await sized(300), 'a.pdf', adminToken, {
+      title: 'Small',
+    })
+    const big = await uploadTo('/api/library', await sized(400), 'b.pdf', adminToken, {
+      title: 'Big',
+    })
+    const send = (body: object) =>
+      request(app)
+        .post(`/api/tenders/${tenderId}/compliance-packs`)
+        .set('Host', ACME)
+        .set(as(adminToken))
+        .send({
+          companyId: c.id,
+          letters: ['tender_acceptance'],
+          libraryFileIds: [small.body.id, big.body.id],
+          ...body,
+        })
+
+    // The order must name every chosen item once.
+    const partial = await send({ order: [{ kind: 'library', id: big.body.id }] })
+    expect(partial.status).toBe(400)
+
+    const req = await send({
+      order: [
+        { kind: 'library', id: big.body.id },
+        { kind: 'letter', id: 'tender_acceptance' },
+        { kind: 'library', id: small.body.id },
+      ],
+    })
+    expect(req.status).toBe(202)
+    await drainJobs()
+    const packs = await request(app)
+      .get(`/api/tenders/${tenderId}/compliance-packs`)
+      .set('Host', ACME)
+      .set(as(adminToken))
+    const pack = packs.body[0] as CompliancePackSummary
+    expect(pack.status).toBe('ready')
+    const pdf = await PDFDocument.load((await download(pack.file!.id)).body as Buffer)
+    expect(pdf.getPages().map((p) => Math.round(p.getWidth()))).toEqual([400, 595, 300])
+  })
+
   it('refuses compliance requests with documents from elsewhere', async () => {
     const c = await createCompany()
     const other = await setupClient(await loginOwner(), await createPlan(), 'other')

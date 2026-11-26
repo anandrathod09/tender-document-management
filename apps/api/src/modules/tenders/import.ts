@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto'
 import { count, eq, gte, inArray } from 'drizzle-orm'
 import type { ExcelChange, ImportResult, ImportRowIssue } from '@tdm/shared'
+import { env } from '../../config/env'
 import { db, type Tx } from '../../db/client'
 import { orgWhere } from '../../db/scope'
 import {
@@ -24,6 +25,7 @@ import {
   profileColumns,
   type ParsedTender,
   type ParseResult,
+  isOwnExport,
 } from './excel'
 import { getImportProfile } from './import-profiles'
 
@@ -130,6 +132,13 @@ export async function importTenders(
     )
   }
   if (parsed.sheetsMatched === 0) {
+    // A common mix-up: our own "Export to Excel" file uploaded instead of the portal's.
+    if (await isOwnExport(file.buffer)) {
+      throw badRequest(
+        'OWN_EXPORT',
+        `This file was exported from ${env.PRODUCT_NAME} (it has Stage and Assigned agent columns), not downloaded from Tender247. Upload the file you downloaded from the Tender247 website.`,
+      )
+    }
     const detail = parsed.issues.map((i) => `${i.sheet}: ${i.message}.`).join(' ')
     throw badRequest(
       'COLUMNS_NOT_FOUND',

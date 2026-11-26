@@ -19,7 +19,7 @@ import { parse } from '../../lib/validate'
 import { authenticateTenant, requirePermission, tenantAuth } from '../../middleware/auth'
 import { listPacks, requestPack } from '../compliance/service'
 import { listFiles, storeFile, toFileSummary } from '../files/service'
-import { suggestColumns, readHeadings } from './excel'
+import { hasOwnExportHeadings, readHeadings, suggestColumns } from './excel'
 import { importTenders } from './import'
 import {
   createImportProfile,
@@ -111,6 +111,7 @@ tendersRouter.post(
     const result: ImportInspectResult = {
       sheets,
       suggested: suggestColumns([...new Set(sheets.flatMap((s) => s.headings))]),
+      ownExport: hasOwnExportHeadings(sheets),
     }
     res.json(result)
   },

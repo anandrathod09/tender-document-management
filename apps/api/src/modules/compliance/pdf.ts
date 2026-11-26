@@ -31,6 +31,11 @@ export interface ComplianceInput {
   logo?: Image | null
   signature?: Image | null
   attachments: Attachment[]
+  /**
+   * Page order: letters by their place in letters + customLetters, documents by
+   * their place in attachments. Left out, all letters first, then the documents.
+   */
+  order?: { type: 'letter' | 'attachment'; index: number }[]
 }
 
 /**
@@ -217,8 +222,8 @@ class LetterWriter {
 }
 
 /**
- * Builds one PDF: each chosen letter on the company letterhead, followed by
- * the chosen documents. Documents that cannot be added (a damaged PDF, an
+ * Builds one PDF: each chosen letter on the company letterhead and the
+ * chosen documents, in the order asked for (letters first by default). Documents that cannot be added (a damaged PDF, an
  * Office file) are skipped and listed in `warnings`.
  */
 export async function buildCompliancePdf(input: ComplianceInput) {
@@ -314,7 +319,7 @@ export async function buildCompliancePdf(input: ComplianceInput) {
     })),
   ]
 
-  for (const letter of toPrint) {
+  const printLetter = (letter: (typeof toPrint)[number]) => {
     writer.newPage()
 
     if (letter.dateAtTop) {
@@ -379,7 +384,7 @@ export async function buildCompliancePdf(input: ComplianceInput) {
     writer.lines(`Date: ${d.date}`)
   }
 
-  for (const a of input.attachments) {
+  const addAttachment = async (a: Attachment) => {
     try {
       if (a.mime === 'application/pdf') {
         const src = await PDFDocument.load(a.bytes, { ignoreEncryption: true })
@@ -402,6 +407,20 @@ export async function buildCompliancePdf(input: ComplianceInput) {
       warnings.push(
         `"${a.title}" could not be read (it may be damaged or password-protected), so it was not added.`,
       )
+    }
+  }
+
+  const order = input.order ?? [
+    ...toPrint.map((_, index) => ({ type: 'letter' as const, index })),
+    ...input.attachments.map((_, index) => ({ type: 'attachment' as const, index })),
+  ]
+  for (const part of order) {
+    if (part.type === 'letter') {
+      const letter = toPrint[part.index]
+      if (letter) printLetter(letter)
+    } else {
+      const a = input.attachments[part.index]
+      if (a) await addAttachment(a)
     }
   }
 
