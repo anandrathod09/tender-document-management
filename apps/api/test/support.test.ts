@@ -10,6 +10,7 @@ import type {
 } from '@tdm/shared'
 import { addDays } from '../src/lib/dates'
 import { testOutbox } from '../src/lib/mailer'
+import { limitKey, SUPPORT_LIMITS } from '../src/modules/support/routes'
 import {
   allowAnyMove,
   app,
@@ -199,6 +200,15 @@ describe('public support page', () => {
     await drainJobs()
     expect(testOutbox.map((m) => m.to).sort()).toEqual(['boss@acme.test', 'service@acme.test'])
     expect(testOutbox[0]!.replyTo).toBeUndefined()
+  })
+
+  it('counts the spam limits separately for each client', () => {
+    expect(SUPPORT_LIMITS.lookups).toEqual({ per: 15 * 60_000, max: 21 })
+    expect(SUPPORT_LIMITS.requests).toEqual({ per: 60 * 60_000, max: 3 })
+    const visitor = (orgId: string) =>
+      ({ ip: '203.0.113.7', ctx: { kind: 'tenant', org: { id: orgId } } }) as never
+    expect(limitKey(visitor('org-a'))).not.toBe(limitKey(visitor('org-b')))
+    expect(limitKey(visitor('org-a'))).toBe(limitKey(visitor('org-a')))
   })
 
   it('checks the form, the product, and ignores bots', async () => {

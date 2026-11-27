@@ -1,4 +1,4 @@
-import { Router } from 'express'
+import { Router, type Request } from 'express'
 import rateLimit from 'express-rate-limit'
 import {
   publicTicketSchema,
@@ -20,10 +20,25 @@ import { supportSettingsOf } from './settings'
 export const supportRouter = Router()
 supportRouter.use(requireTenant)
 
+/**
+ * Per visitor (IP address) and per client: searching on one client's page
+ * does not use up the allowance on another client's page.
+ */
+export const SUPPORT_LIMITS = {
+  lookups: { per: 15 * 60_000, max: 21 },
+  requests: { per: 60 * 60_000, max: 3 },
+}
+
+export function limitKey(req: Request): string {
+  const client = req.ctx.kind === 'tenant' ? req.ctx.org.id : req.ctx.kind
+  return `${client}:${req.ip ?? 'unknown'}`
+}
+
 const skipInTests = () => env.NODE_ENV === 'test'
 const lookupLimiter = rateLimit({
-  windowMs: 15 * 60_000,
-  limit: 30,
+  windowMs: SUPPORT_LIMITS.lookups.per,
+  limit: SUPPORT_LIMITS.lookups.max,
+  keyGenerator: limitKey,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   skip: skipInTests,
@@ -32,8 +47,9 @@ const lookupLimiter = rateLimit({
   },
 })
 const ticketLimiter = rateLimit({
-  windowMs: 60 * 60_000,
-  limit: 5,
+  windowMs: SUPPORT_LIMITS.requests.per,
+  limit: SUPPORT_LIMITS.requests.max,
+  keyGenerator: limitKey,
   standardHeaders: 'draft-7',
   legacyHeaders: false,
   skip: skipInTests,
