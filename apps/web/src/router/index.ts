@@ -49,6 +49,12 @@ function tenantRoutes(): RouteRecordRaw[] {
       'Set your password',
     ),
     ...passwordPages(),
+    // Public: customers check warranty and raise service requests (when turned on in Settings).
+    {
+      path: '/support',
+      component: () => import('@/features/support/SupportPage.vue'),
+      meta: { title: 'Product Support' },
+    },
     {
       path: '/',
       component: AdminLayout,

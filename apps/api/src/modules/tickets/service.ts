@@ -61,6 +61,7 @@ function toSummary(r: Row): TicketSummary {
     type: t.type,
     priority: t.priority,
     status: t.status,
+    source: t.source,
     customerName: t.customerName,
     tender: t.tenderId ? { id: t.tenderId, referenceNo: r.tenderRef ?? '' } : null,
     asset: t.assetId
@@ -118,14 +119,13 @@ export async function getTicket(conn: DbOrTx, auth: TenantAuth, id: string): Pro
     .where(orgWhere(serviceTickets, auth.org.id, eq(serviceTickets.id, id)))
     .limit(1)
   if (!row) throw notFound('TICKET_NOT_FOUND', 'Ticket not found')
-  const [creator] = await conn
-    .select({ name: creators.name })
-    .from(creators)
-    .where(eq(creators.id, row.t.createdBy))
+  const [creator] = row.t.createdBy
+    ? await conn.select({ name: creators.name }).from(creators).where(eq(creators.id, row.t.createdBy))
+    : []
   const updates = await conn
     .select({ u: ticketUpdates, name: users.name })
     .from(ticketUpdates)
-    .innerJoin(users, eq(users.id, ticketUpdates.userId))
+    .leftJoin(users, eq(users.id, ticketUpdates.userId))
     .where(orgWhere(ticketUpdates, auth.org.id, eq(ticketUpdates.ticketId, id)))
     .orderBy(asc(ticketUpdates.createdAt))
   const t = row.t
@@ -139,12 +139,12 @@ export async function getTicket(conn: DbOrTx, auth: TenantAuth, id: string): Pro
     resolutionNotes: t.resolutionNotes,
     resolvedAt: t.resolvedAt ? t.resolvedAt.toISOString() : null,
     satisfaction: t.satisfaction,
-    createdBy: { id: t.createdBy, name: creator?.name ?? '' },
+    createdBy: t.createdBy ? { id: t.createdBy, name: creator?.name ?? '' } : null,
     updates: updates.map(({ u, name }) => ({
       id: u.id,
       status: u.status,
       note: u.note,
-      by: { id: u.userId, name },
+      by: u.userId ? { id: u.userId, name: name ?? '' } : null,
       at: u.createdAt.toISOString(),
     })),
   }
@@ -158,7 +158,17 @@ async function assertActiveUser(conn: DbOrTx, orgId: string, userId: string) {
   if (!u) throw badRequest('USER_NOT_FOUND', 'That user is not an active member of this workspace')
 }
 
-const ticketLink = (id: string) => `/tickets/${id}`
+export const ticketLink = (id: string) => `/tickets/${id}`
+export const ticketNo = (n: number) => `TKT-${String(n).padStart(4, '0')}`
+
+/** The next ticket number for this client (TKT-0001, TKT-0002…). */
+export async function nextTicketNumber(conn: DbOrTx, orgId: string): Promise<number> {
+  const [last] = await conn
+    .select({ n: max(serviceTickets.number) })
+    .from(serviceTickets)
+    .where(orgWhere(serviceTickets, orgId))
+  return (last?.n ?? 0) + 1
+}
 
 /**
  * Records feedback or a service request. Picking an installed unit fills in
@@ -208,12 +218,8 @@ export async function createTicket(auth: TenantAuth, input: CreateInput): Promis
         }
         if (input.assignedTo) await assertActiveUser(tx, orgId, input.assignedTo)
 
-        const [last] = await tx
-          .select({ n: max(serviceTickets.number) })
-          .from(serviceTickets)
-          .where(orgWhere(serviceTickets, orgId))
         const id = randomUUID()
-        const number = (last?.n ?? 0) + 1
+        const number = await nextTicketNumber(tx, orgId)
         await tx.insert(serviceTickets).values({
           id,
           organizationId: orgId,
@@ -243,7 +249,7 @@ export async function createTicket(auth: TenantAuth, input: CreateInput): Promis
             organizationId: orgId,
             userId: input.assignedTo,
             type: 'ticket.assigned',
-            title: `Ticket TKT-${String(number).padStart(4, '0')} assigned to you`,
+            title: `Ticket ${ticketNo(number)} assigned to you`,
             body: input.title,
             link: ticketLink(id),
           })
@@ -323,7 +329,7 @@ export async function updateTicket(
         organizationId: orgId,
         userId: input.assignedTo,
         type: 'ticket.assigned',
-        title: `Ticket TKT-${String(t.number).padStart(4, '0')} assigned to you`,
+        title: `Ticket ${ticketNo(t.number)} assigned to you`,
         body: t.title,
         link: ticketLink(id),
       })

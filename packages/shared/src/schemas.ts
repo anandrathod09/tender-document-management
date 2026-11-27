@@ -7,6 +7,7 @@ import {
   STAGE_TYPES,
   WORKFLOW_RESET_PARTS,
 } from './workflow'
+import { MAX_SUPPORT_EMAILS } from './aftersales'
 import { ORGANIZATION_STATUSES, RESERVED_SUBDOMAINS, SLUG_PATTERN } from './workspace'
 
 const email = z
@@ -50,6 +51,12 @@ export const workspaceSettingsSchema = z
       .min(1, 'At least 1 day')
       .max(MAX_CLEANUP_DAYS, `At most ${MAX_CLEANUP_DAYS} days`)
       .nullable(),
+    // The public support page (yourcompany.…/support) where customers raise service requests.
+    supportPage: z.boolean(),
+    // Who is emailed about new requests; empty = the admins.
+    supportEmails: z
+      .array(email)
+      .max(MAX_SUPPORT_EMAILS, `At most ${MAX_SUPPORT_EMAILS} addresses`),
   })
   .partial()
   .refine((v) => Object.keys(v).length > 0, 'Nothing to update')

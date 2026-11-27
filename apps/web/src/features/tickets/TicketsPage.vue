@@ -138,7 +138,7 @@ watch(q, () => {
             {{ ticketNo(row.number) }} · {{ cap(row.type)
             }}<template v-if="row.asset">
               · {{ row.asset.serialNumber ?? row.asset.itemName }}</template
-            >
+            ><template v-if="row.source === 'support_page'"> · From support page</template>
           </p>
         </template>
         <template #cell-customerName="{ row }">{{ row.customerName ?? '—' }}</template>

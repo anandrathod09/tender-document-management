@@ -27,10 +27,10 @@ const ownScope = (auth: TenantAuth) =>
 type Query = z.output<typeof assetListQuerySchema>
 
 // Warranty starts on the installation date, or the report date when no installation date is recorded.
-const warrantyStart = sql<
+export const warrantyStart = sql<
   string | null
 >`COALESCE(${installedAssets.installedOn}, ${installationReports.reportDate})`
-const warrantyEnd = sql<
+export const warrantyEnd = sql<
   string | null
 >`CASE WHEN ${installedAssets.warrantyMonths} > 0 AND COALESCE(${installedAssets.installedOn}, ${installationReports.reportDate}) IS NOT NULL
   THEN DATE_ADD(COALESCE(${installedAssets.installedOn}, ${installationReports.reportDate}), INTERVAL ${installedAssets.warrantyMonths} MONTH) END`

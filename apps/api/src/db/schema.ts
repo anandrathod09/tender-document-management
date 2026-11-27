@@ -35,6 +35,7 @@ import {
   SERIAL_TYPES,
   STAGE_TYPES,
   TICKET_PRIORITIES,
+  TICKET_SOURCES,
   TICKET_STATUSES,
   TICKET_TYPES,
   USER_STATUSES,
@@ -731,6 +732,8 @@ export const serviceTickets = mysqlTable(
     type: mysqlEnum('type', TICKET_TYPES).notNull().default('complaint'),
     priority: mysqlEnum('priority', TICKET_PRIORITIES).notNull().default('medium'),
     status: mysqlEnum('status', TICKET_STATUSES).notNull().default('new'),
+    // Raised by staff in the app, or by a customer on the public support page.
+    source: mysqlEnum('source', TICKET_SOURCES).notNull().default('staff'),
     tenderId: varchar('tender_id', { length: 36 }).references(() => tenders.id, {
       onDelete: 'set null',
     }),
@@ -746,9 +749,8 @@ export const serviceTickets = mysqlTable(
     resolutionNotes: text('resolution_notes'),
     resolvedAt: datetime('resolved_at', { mode: 'date', fsp: 3 }),
     satisfaction: int('satisfaction'),
-    createdBy: varchar('created_by', { length: 36 })
-      .notNull()
-      .references(() => users.id),
+    // Empty for tickets a customer raised on the public support page.
+    createdBy: varchar('created_by', { length: 36 }).references(() => users.id),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
   },
@@ -769,9 +771,8 @@ export const ticketUpdates = mysqlTable(
       .references(() => serviceTickets.id, { onDelete: 'cascade' }),
     status: mysqlEnum('status', TICKET_STATUSES),
     note: text('note'),
-    userId: varchar('user_id', { length: 36 })
-      .notNull()
-      .references(() => users.id),
+    // Empty for the entry made when a customer raises a ticket on the support page.
+    userId: varchar('user_id', { length: 36 }).references(() => users.id),
     createdAt: createdAt(),
   },
   (t) => [index('ticket_updates_ticket_idx').on(t.organizationId, t.ticketId, t.createdAt)],

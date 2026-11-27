@@ -13,6 +13,7 @@ import { organizations, roles, type Organization } from '../../db/schema'
 import { writeAudit } from '../../lib/audit'
 import { conflict } from '../../lib/errors'
 import type { TenantAuth } from '../../types/express'
+import { supportSettingsOf } from '../support/settings'
 
 export type HostKind =
   { kind: 'root' } | { kind: 'owner' } | { kind: 'tenant'; slug: string } | { kind: 'unknown' }
@@ -81,6 +82,8 @@ export async function getWorkspaceSettings(org: Organization): Promise<Workspace
     agentsSeeAssets: agent?.permissions.includes(PERMISSIONS.ASSET_VIEW) ?? false,
     agentsSeeInstallation: agent?.permissions.includes(PERMISSIONS.INSTALLATION_VIEW) ?? false,
     cleanupDays: cleanupDaysFrom(org.settings),
+    supportPage: supportSettingsOf(org).enabled,
+    supportEmails: supportSettingsOf(org).emails,
   }
 }
 
@@ -123,15 +126,21 @@ export async function updateWorkspaceSettings(
           .where(orgWhere(roles, auth.org.id, eq(roles.id, agent.id)))
       }
     }
-    // Days before unassigned New tenders are deleted, kept with the client's other settings.
-    if (input.cleanupDays !== undefined) {
+    // Kept with the client's other settings: days before unassigned New tenders
+    // are deleted, and the public support page.
+    const stored = {
+      ...(input.cleanupDays !== undefined && { expiredCleanupDays: input.cleanupDays }),
+      ...(input.supportPage !== undefined && { supportPage: input.supportPage }),
+      ...(input.supportEmails !== undefined && { supportEmails: [...new Set(input.supportEmails)] }),
+    }
+    if (Object.keys(stored).length) {
       const [current] = await tx
         .select({ settings: organizations.settings })
         .from(organizations)
         .where(eq(organizations.id, auth.org.id))
       await tx
         .update(organizations)
-        .set({ settings: { ...current?.settings, expiredCleanupDays: input.cleanupDays } })
+        .set({ settings: { ...current?.settings, ...stored } })
         .where(eq(organizations.id, auth.org.id))
     }
     await writeAudit(tx, {

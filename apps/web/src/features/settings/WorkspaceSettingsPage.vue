@@ -3,6 +3,7 @@ import { Settings } from 'lucide-vue-next'
 import { computed, onMounted, ref } from 'vue'
 import type { WorkspaceSettings, WorkspaceSettingsInput } from '@tdm/shared'
 import { DEFAULT_CLEANUP_DAYS, MAX_CLEANUP_DAYS } from '@tdm/shared/workflow'
+import CopyField from '@/components/ui/CopyField.vue'
 import UiAlert from '@/components/ui/UiAlert.vue'
 import UiCard from '@/components/ui/UiCard.vue'
 import { api, errorMessage } from '@/services/api'
@@ -10,8 +11,8 @@ import { useWorkflowStore } from '@/stores/workflow'
 import SettingSwitch from './SettingSwitch.vue'
 
 /**
- * Company-wide switches in one place: two-step login, what agents see, and
- * the automatic cleanup of tenders nobody picked up.
+ * Company-wide switches in one place: two-step login, what agents see, the
+ * automatic cleanup of tenders nobody picked up, and the public support page.
  */
 const settings = ref<WorkspaceSettings | null>(null)
 const loadError = ref('')
@@ -27,11 +28,16 @@ const intake = computed(
   () => workflow.stages.find((s) => s.systemRole === 'intake')?.label ?? 'New',
 )
 
+// The support emails box: addresses separated by commas.
+const emailsDraft = ref('')
+const supportUrl = `${location.origin}/support`
+
 onMounted(async () => {
   workflow.load().catch(() => undefined)
   try {
     settings.value = (await api.get<WorkspaceSettings>('/workspace/settings')).data
     if (settings.value.cleanupDays !== null) draft.value = String(settings.value.cleanupDays)
+    emailsDraft.value = settings.value.supportEmails.join(', ')
   } catch (err) {
     loadError.value = errorMessage(err)
   }
@@ -45,6 +51,7 @@ async function save(change: WorkspaceSettingsInput, done: (s: WorkspaceSettings)
     const { data } = await api.patch<WorkspaceSettings>('/workspace/settings', change)
     settings.value = data
     if (data.cleanupDays !== null) draft.value = String(data.cleanupDays)
+    emailsDraft.value = data.supportEmails.join(', ')
     notice.value = done(data)
   } catch (err) {
     error.value = errorMessage(err)
@@ -102,6 +109,27 @@ function saveDays() {
     return
   }
   if (n !== current) void save({ cleanupDays: n }, cleanupSaved)
+}
+
+const setSupportPage = (on: boolean) =>
+  save({ supportPage: on }, () =>
+    on
+      ? 'The support page is on. Share its link with your customers.'
+      : 'The support page is off. Customers who open it are told to contact you directly.',
+  )
+
+function saveEmails() {
+  const list = emailsDraft.value
+    .split(/[,;\s]+/)
+    .map((e) => e.trim())
+    .filter(Boolean)
+  const current = settings.value?.supportEmails ?? []
+  if (list.join(',').toLowerCase() === current.join(',')) return
+  void save({ supportEmails: list }, (s) =>
+    s.supportEmails.length
+      ? `New support requests are emailed to ${s.supportEmails.join(', ')}.`
+      : 'New support requests are emailed to the admins.',
+  )
 }
 
 const sectionTitle =
@@ -177,6 +205,40 @@ const sectionTitle =
             />
             days after the deadline
           </label>
+        </SettingSwitch>
+
+        <h2 :class="sectionTitle">Support page</h2>
+        <SettingSwitch
+          title="Let customers raise service requests"
+          description="A public page, no sign-in needed, where a customer enters a product's serial number, sees its warranty and raises a service request. Each request becomes a service ticket, and everyone who handles tickets gets a notification."
+          :on="settings.supportPage"
+          :disabled="saving"
+          @toggle="setSupportPage(!settings.supportPage)"
+        >
+          <div v-if="settings.supportPage" class="mt-3 max-w-xl space-y-4">
+            <CopyField :value="supportUrl" label="Link for your customers" />
+            <div>
+              <label
+                for="support-emails"
+                class="mb-1.5 block text-sm font-medium text-gray-700 dark:text-gray-400"
+              >
+                Email new requests to
+              </label>
+              <input
+                id="support-emails"
+                v-model="emailsDraft"
+                type="text"
+                placeholder="service@yourcompany.com, manager@yourcompany.com"
+                :disabled="saving"
+                class="form-field"
+                @blur="saveEmails"
+                @keydown.enter.prevent="($event.target as HTMLInputElement).blur()"
+              />
+              <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                Up to 5 addresses, separated by commas. Leave empty to email the admins.
+              </p>
+            </div>
+          </div>
         </SettingSwitch>
       </div>
     </UiCard>

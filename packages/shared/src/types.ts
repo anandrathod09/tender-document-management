@@ -82,6 +82,10 @@ export interface WorkspaceSettings {
   agentsSeeInstallation: boolean
   /** Days after the deadline before an unassigned New tender is deleted; null = never. */
   cleanupDays: number | null
+  /** Customers can raise service requests on the public support page (off by default). */
+  supportPage: boolean
+  /** Emailed about new support requests; empty = the admins. */
+  supportEmails: string[]
 }
 
 export interface PlanSummary {

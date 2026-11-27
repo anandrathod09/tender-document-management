@@ -163,6 +163,8 @@ describe('two-step login', () => {
       agentsSeeAssets: false,
       agentsSeeInstallation: true,
       cleanupDays: 3,
+      supportPage: false,
+      supportEmails: [],
     })
 
     // Someone without it can sign in, but only reach the setup.

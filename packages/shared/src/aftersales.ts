@@ -282,6 +282,9 @@ export const TICKET_STATUSES = [
 export type TicketType = (typeof TICKET_TYPES)[number]
 export type TicketPriority = (typeof TICKET_PRIORITIES)[number]
 export type TicketStatus = (typeof TICKET_STATUSES)[number]
+/** Who raised the ticket: staff in the app, or a customer on the public support page. */
+export const TICKET_SOURCES = ['staff', 'support_page'] as const
+export type TicketSource = (typeof TICKET_SOURCES)[number]
 export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   new: 'New',
   assigned_to_oem: 'With OEM',
@@ -344,6 +347,7 @@ export interface TicketSummary {
   type: TicketType
   priority: TicketPriority
   status: TicketStatus
+  source: TicketSource
   customerName: string | null
   tender: { id: string; referenceNo: string } | null
   asset: { id: string; itemName: string; serialNumber: string | null } | null
@@ -361,12 +365,14 @@ export interface TicketDetail extends TicketSummary {
   resolutionNotes: string | null
   resolvedAt: string | null
   satisfaction: number | null
-  createdBy: { id: string; name: string }
+  /** Empty when a customer raised it on the support page. */
+  createdBy: { id: string; name: string } | null
   updates: {
     id: string
     status: TicketStatus | null
     note: string | null
-    by: { id: string; name: string }
+    /** Empty for the customer's own entry from the support page. */
+    by: { id: string; name: string } | null
     at: string
   }[]
 }
@@ -376,6 +382,73 @@ export interface TicketPage {
   total: number
   page: number
   pageSize: number
+}
+
+// ---------------------------------------------------------------------------
+// Public support page (no sign-in): customers check warranty by serial number
+// and raise a service request.
+// ---------------------------------------------------------------------------
+
+export const MAX_SUPPORT_EMAILS = 5
+
+export interface SupportPageInfo {
+  /** The client has turned the page on. */
+  enabled: boolean
+  /** The client's name, shown at the top of the page. */
+  name: string
+}
+
+export const supportLookupSchema = z.object({
+  serial: z.string().trim().min(1, 'Enter the serial number').max(100),
+})
+
+/** in = still covered, out = ended, unknown = no warranty recorded for the unit. */
+export const WARRANTY_COVERS = ['in', 'out', 'unknown'] as const
+export type WarrantyCover = (typeof WARRANTY_COVERS)[number]
+
+/** Only what a customer may see: no tender, prices, engineers or contacts. */
+export interface PublicAsset {
+  id: string
+  itemName: string
+  /** The serial number that matched. */
+  serialNumber: string
+  customerName: string | null
+  installedOn: string | null
+  warrantyEnd: string | null
+  daysLeft: number | null
+  warranty: WarrantyCover
+}
+
+export const publicTicketSchema = z.object({
+  serial: z.string().trim().min(1).max(100),
+  assetId: z.uuid(),
+  contactName: z.string().trim().min(1, 'Enter your name').max(120),
+  contactPhone: z
+    .string()
+    .trim()
+    .max(30)
+    .refine((v) => {
+      const digits = v.replace(/\D/g, '').length
+      return digits >= 7 && digits <= 15
+    }, 'Enter a valid phone number'),
+  contactEmail: z
+    .union([z.literal(''), z.string().trim().toLowerCase().pipe(z.email('Enter a valid email address or leave it empty'))])
+    .optional()
+    .transform((v) => v || null),
+  description: z
+    .string()
+    .trim()
+    .min(10, 'Describe the problem (at least 10 characters)')
+    .max(2000),
+  /** Hidden from people; a bot that fills it in is ignored. */
+  website: z.string().max(200).optional(),
+})
+export type PublicTicketInput = z.input<typeof publicTicketSchema>
+
+export interface PublicTicketResult {
+  /** e.g. TKT-0042 */
+  ticketNo: string
+  warranty: WarrantyCover
 }
 
 // ---------------------------------------------------------------------------

@@ -16,6 +16,7 @@ import { notificationsRouter } from './modules/notifications/routes'
 import { assetsRouter, installationRouter } from './modules/installation/routes'
 import { ownerRouter } from './modules/owner/routes'
 import { reportsRouter } from './modules/reports/routes'
+import { supportRouter } from './modules/support/routes'
 import { ticketsRouter } from './modules/tickets/routes'
 import { importProfilesRouter, tendersRouter } from './modules/tenders/routes'
 import { rolesRouter, usersRouter } from './modules/users/routes'
@@ -64,6 +65,8 @@ export function createApp() {
   api.use('/notifications', notificationsRouter)
   api.use('/assets', assetsRouter)
   api.use('/tickets', ticketsRouter)
+  // Public: customers raise service requests without signing in.
+  api.use('/support', supportRouter)
   api.use('/reports', reportsRouter)
   app.use('/api', api)
 

@@ -160,6 +160,8 @@ describe('stage move rules', () => {
       agentsSeeAssets: true,
       agentsSeeInstallation: true,
       cleanupDays: 3,
+      supportPage: false,
+      supportEmails: [],
     })
     expect((await assets(agent.token)).status).toBe(200)
 

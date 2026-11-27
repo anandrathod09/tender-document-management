@@ -182,6 +182,7 @@ Every client starts with four roles. Each person has their own login: the admin 
 - **What agents see → Installed assets:** off by default. Adds or removes `asset.view` on the Agent role.
 - **What agents see → Installation report:** on by default. Adds or removes `installation.view` on the Agent role. When off, agents get 403 `INSTALLATION_HIDDEN` for the report and its PDF, and their tender lists come without consignees. Engineers (`installation.own`) and admins are not affected.
 - **Automatic cleanup:** see [Workflow stages](#workflow-stages).
+- **Support page:** off by default. Turns on the public page `/support` on the client's address (no sign-in), where a customer enters a serial number (main, monitor or CPU), sees the item, customer and warranty, and raises a service request. It shows nothing else: no tender, prices, engineers or contacts. Each request becomes a service ticket marked "From support page" (`source: 'support_page'`, no staff creator), everyone with `ticket.manage` gets a bell notification, and an email goes to the addresses set here (up to 5) or, if none, to the admins. The email's Reply-To is the customer's email when they gave one. Lookups are limited to 30 per 15 minutes and requests to 5 per hour per IP address, and a hidden form field catches bots. When the page is off, the API answers 404 `SUPPORT_PAGE_OFF` and the page tells customers to contact the company directly.
 
 Role switches take effect on the agent's next request; the menu updates when they reload the app.
 

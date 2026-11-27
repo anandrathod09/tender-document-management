@@ -136,7 +136,8 @@ const rated = computed(
               <div class="flex items-center gap-2">
                 <dt class="font-medium text-gray-600 dark:text-gray-400">Opened by:</dt>
                 <dd class="font-semibold text-gray-800 dark:text-gray-300">
-                  {{ ticket.createdBy.name }}, {{ formatDateTime(ticket.createdAt) }}
+                  {{ ticket.createdBy?.name ?? `${ticket.contactName ?? 'Customer'} (support page)` }},
+                  {{ formatDateTime(ticket.createdAt) }}
                 </dd>
               </div>
             </dl>
@@ -214,7 +215,8 @@ const rated = computed(
                   {{ u.note }}
                 </p>
                 <p class="mt-0.5 text-theme-xs text-gray-500">
-                  {{ u.by.name }} · {{ formatDateTime(u.at) }}
+                  {{ u.by?.name ?? `${ticket.contactName ?? 'Customer'} (support page)` }} ·
+                  {{ formatDateTime(u.at) }}
                 </p>
               </li>
             </ol>
