@@ -32,6 +32,7 @@ import {
 import { writeAudit } from '../../lib/audit'
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors'
 import type { TenantAuth } from '../../types/express'
+import { emailUser, engineerAssignedEmail } from '../notifications/emails'
 import { notify } from '../notifications/service'
 import { getVisibleTender, visibilityScope } from '../tenders/service'
 
@@ -626,6 +627,20 @@ export async function saveReport(
         body: `${tender.referenceNo} · ${n.consignee}`,
         link: `/tenders/${tender.id}`,
       })
+    }
+    // One email per engineer, listing every consignee they were just put on.
+    const byEngineer = new Map<string, string[]>()
+    for (const n of newlyAssigned) {
+      byEngineer.set(n.engineerId, [...(byEngineer.get(n.engineerId) ?? []), n.consignee])
+    }
+    for (const [engineerId, consignees] of byEngineer) {
+      await emailUser(
+        tx,
+        auth.org,
+        engineerId,
+        'engineer_assigned',
+        engineerAssignedEmail(tender, consignees, input.customerName ?? null, auth.user.name),
+      )
     }
     await writeAudit(tx, {
       organizationId: orgId,

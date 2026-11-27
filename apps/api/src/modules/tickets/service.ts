@@ -24,6 +24,7 @@ import {
 } from '../../db/schema'
 import { badRequest, conflict, isDuplicateKeyError, notFound } from '../../lib/errors'
 import type { TenantAuth } from '../../types/express'
+import { emailUser, ticketAssignedEmail } from '../notifications/emails'
 import { notify } from '../notifications/service'
 
 type CreateInput = z.output<typeof createTicketSchema>
@@ -253,6 +254,23 @@ export async function createTicket(auth: TenantAuth, input: CreateInput): Promis
             body: input.title,
             link: ticketLink(id),
           })
+          await emailUser(
+            tx,
+            auth.org,
+            input.assignedTo,
+            'ticket_assigned',
+            ticketAssignedEmail(
+              {
+                id,
+                no: ticketNo(number),
+                title: input.title,
+                description: input.description,
+                priority: input.priority,
+                customerName,
+              },
+              auth.user.name,
+            ),
+          )
         }
         return getTicket(tx, auth, id)
       })
@@ -333,6 +351,23 @@ export async function updateTicket(
         body: t.title,
         link: ticketLink(id),
       })
+      await emailUser(
+        tx,
+        auth.org,
+        input.assignedTo,
+        'ticket_assigned',
+        ticketAssignedEmail(
+          {
+            id,
+            no: ticketNo(t.number),
+            title: t.title,
+            description: t.description,
+            priority: input.priority ?? t.priority,
+            customerName: t.customerName,
+          },
+          auth.user.name,
+        ),
+      )
     }
     return getTicket(tx, auth, id)
   })

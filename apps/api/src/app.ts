@@ -6,6 +6,7 @@ import { env } from './config/env'
 import { logger } from './lib/logger'
 import { errorHandler, notFoundHandler } from './middleware/errors'
 import { workspaceContext } from './middleware/workspace'
+import { accountRouter } from './modules/account/routes'
 import { authRouter } from './modules/auth/routes'
 import { billingRouter, ownerBillingRouter, razorpayWebhookHandler } from './modules/billing/routes'
 import { companiesRouter } from './modules/companies/routes'
@@ -47,6 +48,7 @@ export function createApp() {
   if (env.NODE_ENV === 'development') api.use('/dev/mail', mailOutboxRouter)
   api.use('/workspace', workspaceRouter)
   api.use('/auth', authRouter)
+  api.use('/account', accountRouter)
   api.use('/users', usersRouter)
   api.use('/roles', rolesRouter)
   // Plans and payments first; the rest of the owner panel after.

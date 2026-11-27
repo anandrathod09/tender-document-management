@@ -190,6 +190,8 @@ Role switches take effect on the agent's next request; the menu updates when the
 
 **Notifications.** An agent gets a bell notification when a tender is assigned to them, and when someone else moves one of their tenders.
 
+**Event emails.** Three events also send an email (`apps/api/src/modules/notifications/emails.ts`): a tender assigned to you (one email for a bulk assign, listing up to 10 tenders, soonest deadline first, plus any note from the assigner), being made the engineer on consignees (one email per save, listing them), and a service ticket assigned to you. Nobody is emailed about their own action. Each person can switch each email off on **My Email Notifications** (user menu, `/account/notifications`, `GET`/`PATCH /api/account/email-preferences`); all are on by default, and only the events their role can receive are shown. The choice is stored in `users.email_prefs` (event → `false`). The bell notification is sent either way.
+
 ## Installation reports
 
 After a tender is won, the admin fills in its **Installation Report** (the old TMS "Hardware Installation Report"): the order details, then one or more **consignees** (delivery locations), each with an engineer.

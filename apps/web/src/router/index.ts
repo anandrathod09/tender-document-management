@@ -137,6 +137,11 @@ function tenantRoutes(): RouteRecordRaw[] {
           meta: { title: 'My Security' },
         },
         {
+          path: 'account/notifications',
+          component: () => import('@/features/account/EmailNotificationsPage.vue'),
+          meta: { title: 'My Email Notifications' },
+        },
+        {
           path: 'settings/letters',
           component: () => import('@/features/letters/LettersPage.vue'),
           meta: { title: 'Letter templates', permission: PERMISSIONS.COMPANY_MANAGE },

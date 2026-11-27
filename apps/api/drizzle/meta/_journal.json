@@ -127,6 +127,13 @@
       "when": 1795816970417,
       "tag": "0017_public_support_tickets",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1795819792068,
+      "tag": "0018_user_email_preferences",
+      "breakpoints": true
     }
   ]
 }

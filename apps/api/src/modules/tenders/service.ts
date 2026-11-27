@@ -58,6 +58,7 @@ import { addDays, todayIn } from '../../lib/dates'
 import { badRequest, conflict, forbidden, notFound } from '../../lib/errors'
 import type { TenantAuth } from '../../types/express'
 import { notify } from '../notifications/service'
+import { emailUser, tenderAssignedEmail } from '../notifications/emails'
 import { firstStageOfType, getStage, listStages } from '../workflow/service'
 
 export type ListQuery = z.output<typeof tenderListQuerySchema>
@@ -703,6 +704,13 @@ export async function assignTender(auth: TenantAuth, id: string, input: AssignTe
         body: `${tender.referenceNo} · ${tender.title}${noteFrom(auth, input.note)}`,
         link: `/tenders/${tender.id}`,
       })
+      await emailUser(
+        tx,
+        auth.org,
+        input.agentId,
+        'tender_assigned',
+        tenderAssignedEmail([tender], auth.user.name, input.note),
+      )
     }
     return getTenderDetail(tx, auth, tender.id)
   })
@@ -798,6 +806,14 @@ export async function bulkTenderAction(
             : `${refList(list)} · by ${auth.user.name}${input.note ? `: ${input.note}` : ''}`,
           link: one ? `/tenders/${one.id}` : '/tenders?assigned=me',
         })
+        // One email for the whole batch, like the notification.
+        await emailUser(
+          tx,
+          auth.org,
+          userId,
+          'tender_assigned',
+          tenderAssignedEmail(list, auth.user.name, input.note),
+        )
       }
     }
     return { updated, unchanged: rows.length - updated }

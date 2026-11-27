@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ChevronDown, LogOut, ShieldCheck } from 'lucide-vue-next'
+import { ChevronDown, LogOut, Mail, ShieldCheck } from 'lucide-vue-next'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
@@ -89,6 +89,16 @@ async function signOut() {
         >
           {{ auth.session?.twoFactor.enabled ? '2-step on' : '2-step off' }}
         </span>
+      </RouterLink>
+      <RouterLink
+        v-if="auth.tenant"
+        to="/account/notifications"
+        role="menuitem"
+        class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-theme-sm font-medium text-gray-700 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-white/5"
+        @click="open = false"
+      >
+        <Mail class="size-5" aria-hidden="true" />
+        My Email Notifications
       </RouterLink>
       <button
         type="button"

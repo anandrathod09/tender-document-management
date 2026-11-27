@@ -251,6 +251,8 @@ export const users = mysqlTable(
     totpRecoveryCodes: json('totp_recovery_codes').$type<string[]>(),
     inviteTokenHash: varchar('invite_token_hash', { length: 64 }),
     inviteExpiresAt: datetime('invite_expires_at', { mode: 'date', fsp: 3 }),
+    // Emails the person switched off (event -> false); empty = every email on.
+    emailPrefs: json('email_prefs').$type<Partial<Record<string, boolean>>>(),
     lastLoginAt: datetime('last_login_at', { mode: 'date', fsp: 3 }),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
